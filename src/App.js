@@ -7,7 +7,9 @@ import { Doughnut } from 'react-chartjs-2';
 import {Chart, ArcElement} from 'chart.js';
 
 import {CategoryScale} from 'chart.js'; 
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line,BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+
 
 Chart.register(CategoryScale);
 Chart.register(ArcElement);
@@ -69,7 +71,59 @@ function App() {
     { name: 'F',  pv: 3800},
     { name: 'G', pv: 4300 },
   ];
+  const [detailsVisible, setDetailsVisible] = useState(Array(data.length).fill(false));
 
+  // Sample data
+  const tabledata = [
+    { name: 'John Doe', patient_id:'ATH-COC124', invoice_no: 'INV452', invoice_no: 'INV452',invoice_date: '2023-09-10', amount:12000, status: 'Pending' },
+    { name: 'Jane Smith',patient_id:'ATH-COC125', invoice_no: 'INV453', invoice_date: '2023-09-10', amount:2000,status: 'Pending' },
+    { name: 'Bob Johnson',patient_id:'ATH-COC126',  invoice_no: 'INV454',invoice_date: '2023-09-10', amount:10000,status: 'Pending' },
+  ];
+
+  const toggleDetails = (index) => {
+    const newDetailsVisible = [...detailsVisible];
+    newDetailsVisible[index] = !newDetailsVisible[index];
+    setDetailsVisible(newDetailsVisible);
+  };
+
+
+
+
+  
+// Sample chart data
+const pdata = [
+    {
+        name: 'MongoDb',
+       
+        fees: 120
+    },
+    {
+        name: 'Javascript',
+       
+        fees: 12
+    },
+    {
+        name: 'PHP',
+      
+        fees: 10
+    },
+    {
+        name: 'Java',
+       
+        fees: 5
+    },
+    {
+        name: 'C#',
+      
+        fees: 4
+    },
+    {
+        name: 'C++',
+       
+        fees: 8
+    },
+];
+  
   return (
     <div className="App">
        
@@ -264,10 +318,10 @@ function App() {
                    </div>
                
                 </div>
-                <div className="rounded bg-white p-10  shadow-sm border-solid border-2 border-sky-500">
+                <div className="rounded bg-white p-6  shadow-sm border-solid border-2 border-sky-500">
 
                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data1}>
+                    {/* <BarChart data={data1}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="name" />
                       <YAxis />
@@ -275,7 +329,19 @@ function App() {
                       <Legend />
                       <Bar dataKey="pv" fill="#8884d8" />
                      
-                    </BarChart>
+                    </BarChart> */}
+                    <LineChart data={pdata} >
+                    <CartesianGrid />
+                      <XAxis dataKey="name" 
+                          interval={'preserveStartEnd'} />
+                      <YAxis></YAxis>
+                      <Legend />
+                      <Tooltip />
+                      
+                      <Line dataKey="fees"
+                          stroke="red" activeDot={{ r: 8 }} />
+                    </LineChart>
+            
                   </ResponsiveContainer>
                 
                      
@@ -291,24 +357,34 @@ function App() {
                       <thead class="text-xs text-black uppercase bg-white dark:bg-white dark:text-black border-b border-gray-100">
                           <tr>
                               <th scope="col" class="px-6 py-3 font-semibold">
-                                  Product name
+                                  Sno
                               </th>
                               <th scope="col" class="px-6 py-3 font-semibold">
-                                  Color
+                                  Patient ID
                               </th>
                               <th scope="col" class="px-6 py-3 font-semibold">
-                                  Category
+                                  Patient Name
                               </th>
                               <th scope="col" class="px-6 py-3 font-semibold">
-                                  Price
+                                  Invoice No
                               </th>
                               <th scope="col" class="px-6 py-3 font-semibold">
-                                  Action
+                                  Invoice Date
                               </th>
+                              <th scope="col" class="px-6 py-3 font-semibold">
+                                  Amount
+                              </th>
+                              <th scope="col" class="px-6 py-3 font-semibold">
+                                  Status
+                              </th>
+                              <th scope="col" class="px-6 py-3 font-semibold">
+                                  Details
+                              </th>
+                             
                           </tr>
                       </thead>
                       <tbody>
-                          <tr class=" border-b border-gray-100 bg-white ">
+                          {/* <tr class=" border-b border-gray-100 bg-white ">
                               <th scope="row" class="px-6 py-4 font-normal text-black whitespace-nowrap ">
                                   Apple MacBook Pro 17"
                               </th>
@@ -409,7 +485,41 @@ function App() {
                               <td class="px-6 py-4 text-black whitespace-nowrap">
                                   <a href="#" class="font-medium text-blue-600 dark:text-blue-500 hover:underline">Edit</a>
                               </td>
-                          </tr>
+                          </tr> */}
+                          {tabledata.map((item, index) => (
+                          <React.Fragment key={index}>
+                            <tr className='border-b border-gray-100 bg-white'>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{index+1}</td>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.patient_id}</td>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.name}</td>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.invoice_no}</td>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.invoice_date}</td>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.amount}</td>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.status}</td>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">
+                                <button onClick={() => toggleDetails(index)}>
+                                  {detailsVisible[index] ? 'Hide' : 'View'} Split-up
+                                </button>
+                              </td>
+                            </tr>
+                            {detailsVisible[index] && (
+                              <tr class="border-b border-gray-100 bg-white">
+                                <th scope="col" class="px-6 py-3 font-semibold">
+                                  Sno
+                                </th>
+                                <th scope="col" class="px-6 py-3 font-semibold">
+                                    Invoice Date
+                                </th>
+                                <th scope="col" class="px-6 py-3 font-semibold">
+                                    Patient Name
+                                </th>
+                                <th scope="col" class="px-6 py-3 font-semibold">
+                                    Amount
+                                </th>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        ))}
                       </tbody>
                   </table>
               </div>
