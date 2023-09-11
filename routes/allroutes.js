@@ -19,4 +19,6 @@ router.post("/getserviceinvoice",ReportModule_1.getServiceInvoice);
 
 router.post("/getsummary",ReportModule_1.getSummary);
 
+router.post("/getalldayinvoice",ReportModule_1.getalldayinvoice);
+
 module.exports = router; // export to use in server.js

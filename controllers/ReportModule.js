@@ -84,6 +84,65 @@ const Reports = (req, res) => {
     }
   }
 
+  const getalldayinvoice=async (req,res,next)=>{
+
+    try{
+
+        const { from_date, to_date,branch_id } = req.query;
+
+        if (!from_date || !to_date) {
+          return res.status(400).json({ error: 'Please provide both start and end dates' });
+        }
+    
+        const default_branches=await new Promise((resolve,reject)=>{
+        
+          db.query("select distinct id from master_branches",(err, results) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve(results);
+            }
+          });
+
+        });
+        all_branches=default_branches.map(tt=>tt.id);
+        
+        const filter_branches=!(branch_id)?all_branches:branch_id;
+
+        const query = `
+        SELECT case_invoices.invoice_date as invoice_date,sum(case_invoices.total_amount) as total_invoice_amount
+        FROM case_invoices 
+        WHERE case_invoices.invoice_date >= ? AND case_invoices.invoice_date <= ? and status!='Cancelled'
+       and case_invoices.branch_id in (?) group by case_invoices.invoice_date;`;
+      
+        const invoice_results = await new Promise((resolve, reject) => {
+          db.query(query, [from_date, to_date, filter_branches], (err, results) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve(results);
+            }
+          });
+        });
+
+        console.log(invoice_results);
+       
+
+        
+
+        //console.log(results);
+
+
+     
+
+        res.status(200).json(invoice_results);
+
+      //console.log("Total Amount Sum: $" + totalAmountSum.toFixed(2)); // Rounded to 2 decimal places
+
+    }catch(error){
+
+    }
+  }
   const getInvoices= async (req,res,next)=>{
 
     try{
@@ -315,5 +374,6 @@ const Reports = (req, res) => {
     getInvoices,
     getInvoiceSplitUp,
     getServiceInvoice,
-    getSummary
+    getSummary,
+    getalldayinvoice
   }
