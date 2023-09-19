@@ -36,7 +36,7 @@ const Reports = (req, res) => {
         });
         all_branches=default_branches.map(tt=>tt.id);
         
-        const filter_branches=!(branch_id)?all_branches:branch_id;
+        const filter_branches=!(branch_id==undefined)?all_branches:branch_id;
 
         const query = `
         SELECT sum(case_invoices.total_amount) as total_invoice_amount
@@ -75,7 +75,7 @@ const Reports = (req, res) => {
         // map1.set('Receipt_Sum',receipt_results[0].total_receipt_amount);
         // console.log(map1);
 
-        res.status(200).json({'total_sum':result_json});
+        res.status(200).json({success:true,data:result_json});
 
       //console.log("Total Amount Sum: $" + totalAmountSum.toFixed(2)); // Rounded to 2 decimal places
 
@@ -107,10 +107,10 @@ const Reports = (req, res) => {
         });
         all_branches=default_branches.map(tt=>tt.id);
         
-        const filter_branches=!(branch_id)?all_branches:branch_id;
+        const filter_branches=!(branch_id==undefined)?all_branches:branch_id;
 
         const query = `
-        SELECT case_invoices.invoice_date as invoice_date,sum(case_invoices.total_amount) as total_invoice_amount
+        SELECT case_invoices.invoice_date as label,sum(case_invoices.total_amount) as y
         FROM case_invoices 
         WHERE case_invoices.invoice_date >= ? AND case_invoices.invoice_date <= ? and status!='Cancelled'
        and case_invoices.branch_id in (?) group by case_invoices.invoice_date;`;
@@ -124,10 +124,29 @@ const Reports = (req, res) => {
             }
           });
         });
-
+        console.log("Daily Results:");
         console.log(invoice_results);
-       
 
+        invoice_results.forEach(function(obj){
+
+           
+        //const timestamp = "2023-09-12T18:30:00.000Z";
+        const dateObject = new Date(obj.label);
+        
+        // Extract year, month, and day components
+        const year = dateObject.getUTCFullYear() % 100; // Get the last two digits of the year
+        const month = (dateObject.getUTCMonth() + 1).toString().padStart(2, '0'); // Months are zero-based, so add 1
+        const day = dateObject.getUTCDate().toString().padStart(2, '0');
+        
+        // Create the formatted date string
+        const formattedDate = `${day}-${month}-${year}`;
+        
+        console.log(formattedDate); // Output: "12-09-23"
+        obj.label=formattedDate;
+        
+       
+          //console.log(obj.label);
+        })
         
 
         //console.log(results);
@@ -135,7 +154,7 @@ const Reports = (req, res) => {
 
      
 
-        res.status(200).json(invoice_results);
+        res.status(200).json({success:true,data:invoice_results});
 
       //console.log("Total Amount Sum: $" + totalAmountSum.toFixed(2)); // Rounded to 2 decimal places
 
@@ -167,12 +186,14 @@ const Reports = (req, res) => {
      });
      all_branches=default_branches.map(tt=>tt.id);
      
-     const filter_branches=!(branch_id)?all_branches:branch_id;
+     const filter_branches=!(branch_id==undefined)?all_branches:branch_id;
 
       const query = `
-        SELECT * 
+        SELECT case_invoices.id,master_branches.branch_name,patients.patient_id,patients.first_name,case_invoices.invoice_no,date_format(case_invoices.invoice_date,'%Y-%m-%d') as dates,case_invoices.total_amount,case_invoices.amount_paid,case_invoices.status 
         FROM case_invoices 
-        WHERE case_invoices.invoice_date >= ? AND case_invoices.invoice_date <= ? and status!='Cancelled'
+        join patients on case_invoices.patient_id=patients.id
+        join master_branches on case_invoices.branch_id=master_branches.id
+        WHERE case_invoices.invoice_date >= ? AND case_invoices.invoice_date <= ? and case_invoices.status!='Cancelled'
        and case_invoices.branch_id in (?)`;
       //const branches=!(req.query.branch_id)?req.query.branch_id:[;
       const results = await new Promise((resolve, reject) => {
@@ -242,6 +263,66 @@ const Reports = (req, res) => {
     }
   };
 
+  const getServiceInvoiceSplitup=async (req,res,next)=>{
+
+    try{
+
+      //  const {invoice_no}=req.query;
+        const {from_date,to_date,branch_id,service_name}=req.query;
+        //console.log(service_name); 
+        if (!from_date || !to_date) {
+          return res.status(400).json({ error: 'Please provide both start and end dates' });
+        }
+    
+       const default_branches=await new Promise((resolve,reject)=>{
+       
+        db.query("select distinct id from master_branches",(err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
+        });
+  
+       });
+       all_branches=default_branches.map(tt=>tt.id);
+       
+       const filter_branches=!(branch_id==undefined)?all_branches:branch_id;
+       
+       console.log(from_date+" "+to_date+" "+branch_id+" "+service_name);
+       
+        const service_id=await new Promise((resolve,reject)=>{
+
+          db.query("select id from master_services where service_name=?",[service_name],(err, results) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve(results);
+            }
+          });
+
+        });
+        console.log(service_id[0].id);
+
+        query="SELECT master_branches.branch_name as branch_name,patients.patient_id as patient_id,patients.first_name as patient_name,master_services.service_name as service_name,case_invoices.invoice_no as invoice_no,case_schedules.schedule_date as service_date,case_schedules.amount as amount FROM `case_invoices` join case_invoice_items on case_invoice_items.invoice_id=case_invoices.id join case_schedules on case_invoice_items.item_id=case_schedules.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id join master_services on case_schedules.service_required=master_services.id where invoice_date BETWEEN ? and ? and case_invoices.branch_id in (?) and case_schedules.service_required=?"
+        const result=await new Promise((resolve,reject)=>{
+          
+          db.query(query,[from_date,to_date,filter_branches,service_id[0].id],(err, results) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve(results);
+            }
+          });
+
+
+        });
+        res.status(200).json({success:true,data:result});
+
+    }catch(error){
+      console.log(error);
+    }
+  };
   const getServiceInvoice=async (req,res)=>{
 
     const { from_date, to_date,branch_id } = req.query;
@@ -263,10 +344,10 @@ const Reports = (req, res) => {
      });
      all_branches=default_branches.map(tt=>tt.id);
      
-     const filter_branches=!(branch_id)?all_branches:branch_id;
+     const filter_branches=!(branch_id==undefined)?all_branches:branch_id;
      
      const query = `
-     select master_services.service_name, sum(case_schedules.amount) as service_total_amount 
+     select master_services.service_name as label, sum(case_schedules.amount) as y 
      from case_schedules join master_services on case_schedules.service_required=master_services.id 
      where case_schedules.id in (SELECT item_id FROM case_invoice_items WHERE invoice_id in (select id from case_invoices where invoice_date>=? and invoice_date<=? and case_invoices.branch_id in (?) and status!='Cancelled') and status!='Cancelled') group by case_schedules.service_required`;
      
@@ -281,7 +362,8 @@ const Reports = (req, res) => {
         });
       });
       console.log(results);
-      res.status(200).json({'Result':results});
+      res.status(200).json({ success: true, data: results });
+
   };
 
  const ActiveClients =async (req,res)=>{
@@ -375,5 +457,6 @@ const Reports = (req, res) => {
     getInvoiceSplitUp,
     getServiceInvoice,
     getSummary,
-    getalldayinvoice
+    getalldayinvoice,
+    getServiceInvoiceSplitup
   }
