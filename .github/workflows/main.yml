@@ -11,10 +11,10 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      BUCKET: athulyaseniorliving.in
+      BUCKET: homecaredashboard
       DIST: build
       REGION: ap-south-1
-      DIST_ID: EFN7DK67YHZ1U
+      DIST_ID: E2APMEDFBNH23D
 
     steps:
       - name: Checkout
