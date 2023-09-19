@@ -1,26 +1,33 @@
 import './App.css';
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect,useRef } from "react";
 import Select from 'react-select';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css'
-import { Doughnut } from 'react-chartjs-2';
-import {Chart, ArcElement} from 'chart.js';
+import CanvasJSReact from '@canvasjs/react-stockcharts';
 
-import {CategoryScale} from 'chart.js'; 
-import { LineChart, Line,BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-
-
-
-Chart.register(CategoryScale);
-Chart.register(ArcElement);
+import axios from 'axios';
 function App() {
 
+  var CanvasJS = CanvasJSReact.CanvasJS;
+  var CanvasJSStockChart = CanvasJSReact.CanvasJSStockChart;
+
+  //var CanvasJSChart = CanvasJSReact.CanvasJSChart;
+  const { CanvasJSChart } = CanvasJSReact;
+
+
+  const containerProps = {
+    width: "100%",
+    height: "100%",
+    margin: "auto"
+  };
+
+
   const selectBranch = [
-    { label: 'Athulya Homecare Chennai', value: 'Athulya Homecare Chennai' },
-    { label: 'Athulya Homecare Bangalore', value: 'Athulya Homecare Bangalore' },
-    { label: 'Athulya Homecare Cochin', value: 'Athulya Homecare Cochin' },
-    { label: 'Athulya Homecare Hyderabad', value: 'Athulya Homecare Hyderabad' },
-    { label: 'Athulya Homecare Coimbatore', value: 'Athulya Homecare Coimbatore' },
+    {id:1, label: 'Athulya Homecare Chennai', value: 'Athulya Homecare Chennai' },
+    {id:2, label: 'Athulya Homecare Bangalore', value: 'Athulya Homecare Bangalore' },
+    {id:3, label: 'Athulya Homecare Cochin', value: 'Athulya Homecare Cochin' },
+    {id:4, label: 'Athulya Homecare Hyderabad', value: 'Athulya Homecare Hyderabad' },
+    {id:5, label: 'Athulya Homecare Coimbatore', value: 'Athulya Homecare Coimbatore' },
   
   ];
   
@@ -29,16 +36,265 @@ function App() {
     { label: 'Month', value: 'Month' }
   
   ];
-  const [fromDate, setFromDate] = useState(null);
-  const [toDate, setToDate] = useState(null);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [branch, setBranch] = useState('');
+  const [invoiceamount,setinvoiceamount]=useState(0);
+  const [receiptamount,setreceipamount]=useState(0);
+  const [remainingamount,setremainingamount]=useState(0);
+
+  const [servicecategory, setservicecategory]=useState([]);
+  const [tabledata1,settabledata1]=useState([]);
+  const [tabledata2,settabledata2]=useState([]);
+  const [alldaydata,setalldaydata]=useState([]);
+  const [selecttype,setselecttype]=useState('Invoices');
+  const [splitup, setSplitup] = useState({});
+  useEffect(() => {
+    fetchData();
+    console.log(selecttype);
+  }, []);
 
   const handleFromDate = (date) => {
     setFromDate(date);
   };
+
+  const handleBranch=(branch)=>{
+    setBranch(branch);
+  }
   const handleToDate=(date)=>{
     setToDate(date);
   }
+  const handleDataPointClick = (dataPoint) => {
+    console.log(`You clicked on ${dataPoint.label} with value ${dataPoint.y}`);
+    var today = new Date();
+    var dd = String(today.getDate()).padStart(2, '0');
+    var mm = String(today.getMonth() + 1).padStart(2, '0'); //January is 0!
+    var yyyy = today.getFullYear();
+
+    today = yyyy+'-'+mm+'-'+dd;
+    from_Date=!(fromDate)?today:from_Date;
+    to_Date=!(toDate)?today:to_Date;
+
+    var from_Date = new Date(fromDate);
+    var year = from_Date.getFullYear();
+    var month = String(from_Date.getMonth() + 1).padStart(2, "0"); // Months are 0-indexed, so add 1 and pad with zeros
+    var day = String(from_Date.getDate()).padStart(2, "0");
+
+    from_Date = `${year}-${month}-${day}`;
+
+    var to_Date = new Date(toDate);
+    year = to_Date.getFullYear();
+    month = String(to_Date.getMonth() + 1).padStart(2, "0"); // Months are 0-indexed, so add 1 and pad with zeros
+    day = String(to_Date.getDate()).padStart(2, "0");
+
+    to_Date = `${year}-${month}-${day}`;
+    var category=dataPoint.label;
+    var select_branch=branch.id;
+     
+    console.log(from_Date);
+    console.log(to_Date);
+    console.log(branch);
+    console.log(category);
+ 
+    console.log(from_Date);
+    console.log(to_Date);
+    console.log(branch);
+    //from_Date='2023-09-01';
+    //to_Date='2023-09-24';
+    axios.post(`http://localhost:4041/getserviceinvoicesplitup?from_date=${from_Date}&to_date=${to_Date}&branch_id=${select_branch}&service_name=${category}`)
+      .then(response => {
+        //setData(response.data);
+        setselecttype('Category');
+        settabledata2(response.data.data);
+        console.log(response.data.data);
+      })
+      .catch(error => {
+        console.error('Error fetching data: ', error);
+      });
+   
+
+  };
   
+  
+  const addSymbols = (e) => {
+    var suffixes = ["", "K", "M", "B"];
+    var order = Math.max(Math.floor(Math.log(Math.abs(e.value)) / Math.log(1000)), 0);
+    if(order > suffixes.length - 1)
+      order = suffixes.length - 1;
+    var suffix = suffixes[order];
+    return CanvasJS.formatNumber(e.value / Math.pow(1000, order)) + suffix;
+  };
+  
+
+  const fetchData = () => {
+    var today = new Date();
+    var dd = String(today.getDate()).padStart(2, '0');
+    var mm = String(today.getMonth() + 1).padStart(2, '0'); //January is 0!
+    var yyyy = today.getFullYear();
+
+    today = yyyy+'-'+mm+'-'+dd;
+    from_Date=!(fromDate)?today:from_Date;
+    to_Date=!(toDate)?today:to_Date;
+
+    var from_Date = new Date(fromDate);
+    var year = from_Date.getFullYear();
+    var month = String(from_Date.getMonth() + 1).padStart(2, "0"); // Months are 0-indexed, so add 1 and pad with zeros
+    var day = String(from_Date.getDate()).padStart(2, "0");
+
+    from_Date = `${year}-${month}-${day}`;
+
+    var to_Date = new Date(toDate);
+    year = to_Date.getFullYear();
+    month = String(to_Date.getMonth() + 1).padStart(2, "0"); // Months are 0-indexed, so add 1 and pad with zeros
+    day = String(to_Date.getDate()).padStart(2, "0");
+
+    to_Date = `${year}-${month}-${day}`;
+    var select_branch=branch.id;
+     
+    console.log(from_Date);
+    console.log(to_Date);
+    console.log(branch);
+    //from_Date='2023-09-01';
+    //to_Date='2023-09-24';
+    axios.post(`http://localhost:4041/getinvoices?from_date=${from_Date}&to_date=${to_Date}&branch_id=${select_branch}`)
+      .then(response => {
+        //setData(response.data);
+        settabledata1(response.data.data);
+        console.log(response.data.data);
+      })
+      .catch(error => {
+        console.error('Error fetching data: ', error);
+      });
+   
+      axios.post(`http://localhost:4041/getserviceinvoice?from_date=${from_Date}&to_date=${to_Date}&branch_id=${select_branch}`)
+      .then(response => {
+        //setData(response.data);
+        setservicecategory(response.data.data);
+        //console.log(response.data.data);
+        console.log(servicecategory);
+      })
+      .catch(error => {
+        console.error('Error fetching data: ', error);
+      });
+
+      axios.post(`http://localhost:4041/getalldayinvoice?from_date=${from_Date}&to_date=${to_Date}&branch_id=${select_branch}`)
+      .then(response => {
+        //setData(response.data);
+        setalldaydata(response.data.data);
+        //console.log(response.data.data);
+        console.log(alldaydata);
+      })
+      .catch(error => {
+        console.error('Error fetching data: ', error);
+      });
+
+      axios.post(`http://localhost:4041/getsummary?from_date=${from_Date}&to_date=${to_Date}&branch_id=${select_branch}`)
+      .then(response => {
+        //setData(response.data);
+        var invoice_amount=response.data.data['Invoice_Sum'];
+        var receipt_amount=response.data.data['Receipt_Sum'];
+        var remaining_amount=invoice_amount-receipt_amount;
+        let rupeeIndian = Intl.NumberFormat("en-IN", {
+          style: "currency",
+          currency: "INR",
+        });
+        invoice_amount=rupeeIndian.format(invoice_amount);
+        receipt_amount=rupeeIndian.format(receipt_amount);
+        remaining_amount=rupeeIndian.format(remaining_amount);
+
+        setinvoiceamount(invoice_amount);
+        setreceipamount(receipt_amount);
+        setremainingamount(remaining_amount);
+        
+        //console.log(response.data.data);
+        console.log(response.data.data['Invoice_Sum']);
+      })
+      .catch(error => {
+        console.error('Error fetching data: ', error);
+      });
+  };
+  
+  const stock_chart_options = {
+    title:{
+      text:"Invoices Generated"
+    },
+    subtitles: [{
+      text: "INR"
+    }],
+    theme: "light2",
+    animationEnabled: true,
+    exportEnabled: true,
+    charts: [{
+      axisX: {
+        title: "Period",
+        crosshair: {
+          enabled: true,
+          snapToDataPoint: true,
+          valueFormatString: "DD-MM-YY"
+        }
+      },
+      axisY: {
+        title: "Income",
+        crosshair: {
+          enabled: true,
+          snapToDataPoint: true,
+          valueFormatString: "#,###.##"
+        }
+      },
+      toolTip: {
+        shared: true
+      },
+      data: [{
+        type: "splineArea",
+        xValueFormatString: "DD-MM-YY",
+        color: "#3576a8",
+        dataPoints:alldaydata
+      }],
+      navigator: {
+        slider: {
+          minimum: new Date("2017-05-01"),
+          maximum: new Date("2018-05-01")
+        }
+      }
+
+    }],    
+    // rangeSelector: {
+    //   inputFields: {
+    //     startValue: 0,
+    //     endValue: 600000,
+    //     valueFormatString: "###0"
+    //   },
+      
+      
+    // }
+  };
+
+  const category_chart_options = {
+    animationEnabled: true,
+    theme: "light2",
+    title:{
+      text: "Invoices Created Based on Category"
+    },
+    axisX: {
+      title: "Category",
+      reversed: true,
+    },
+    axisY: {
+      title: "Income",
+      includeZero: true,
+      labelFormatter: addSymbols
+    },
+    data: [{
+      type: "bar",
+      dataPoints: servicecategory,
+      click: (e) => {
+        const dataPoint = e.dataPoint;
+        handleDataPointClick(dataPoint);
+      }
+    }],
+    
+  }
+  const [selectedData, setSelectedData] = useState('data1');
   const data = {
     labels: ['Red', 'Blue', 'Yellow'],
     datasets: [
@@ -49,88 +305,62 @@ function App() {
       },
     ],
   };
-
-  const options = {
-    cutoutPercentage: 70, // Adjust this value to control the donut size
-    legend: {
-      position: 'center', // Position the legend to the right of the chart
-    },
-      responsive: true,
-      maintainAspectRatio: false,
-
-  };
   
-  const [selectedData, setSelectedData] = useState('data1');
 
-  const data1 = [
-    { name: 'A',  pv: 2400 },
-    { name: 'B',  pv: 1398 },
-    { name: 'C', pv: 9800},
-    { name: 'D',  pv: 3908 },
-    { name: 'E',  pv: 4800 },
-    { name: 'F',  pv: 3800},
-    { name: 'G', pv: 4300 },
-  ];
+
   const [detailsVisible, setDetailsVisible] = useState(Array(data.length).fill(false));
 
   // Sample data
-  const tabledata = [
-    { name: 'John Doe', patient_id:'ATH-COC124', invoice_no: 'INV452', invoice_no: 'INV452',invoice_date: '2023-09-10', amount:12000, status: 'Pending' },
-    { name: 'Jane Smith',patient_id:'ATH-COC125', invoice_no: 'INV453', invoice_date: '2023-09-10', amount:2000,status: 'Pending' },
-    { name: 'Bob Johnson',patient_id:'ATH-COC126',  invoice_no: 'INV454',invoice_date: '2023-09-10', amount:10000,status: 'Pending' },
-  ];
+  // const tabledata = [
+  //   { name: 'John Doe', patient_id:'ATH-COC124', invoice_no: 'INV452', invoice_no: 'INV452',invoice_date: '2023-09-10', amount:12000, status: 'Pending' },
+  //   { name: 'Jane Smith',patient_id:'ATH-COC125', invoice_no: 'INV453', invoice_date: '2023-09-10', amount:2000,status: 'Pending' },
+  //   { name: 'Bob Johnson',patient_id:'ATH-COC126',  invoice_no: 'INV454',invoice_date: '2023-09-10', amount:10000,status: 'Pending' },
+  // ];
 
-  const toggleDetails = (index) => {
-    const newDetailsVisible = [...detailsVisible];
-    newDetailsVisible[index] = !newDetailsVisible[index];
-    setDetailsVisible(newDetailsVisible);
+  // const toggleDetails = (index) => {
+  //   const newDetailsVisible = [...detailsVisible];
+  //   newDetailsVisible[index] = !newDetailsVisible[index];
+  //   setDetailsVisible(newDetailsVisible);
+  // };
+  const toggleDetails = async (id) => {
+    try {
+      const requestBody = {
+        id: id,
+      };
+      const response = await fetch(`http://localhost:4041/getinvoicesplitup?invoice_id=${id}`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+      const result = await response.json();
+
+      // Update the split-up data for the specific invoice ID
+      setSplitup((prevSplitup) => ({
+        ...prevSplitup,
+        [id]: result.success,
+      }));
+
+      // Toggle the visibility for the specific invoice ID
+      setDetailsVisible((prevDetailsVisible) => ({
+        ...prevDetailsVisible,
+        [id]: !prevDetailsVisible[id],
+      }));
+    } catch (error) {
+      console.error("Error fetching details from the API:", error);
+    }
   };
 
 
-
-
-  
-// Sample chart data
-const pdata = [
-    {
-        name: 'MongoDb',
-       
-        fees: 120
-    },
-    {
-        name: 'Javascript',
-       
-        fees: 12
-    },
-    {
-        name: 'PHP',
-      
-        fees: 10
-    },
-    {
-        name: 'Java',
-       
-        fees: 5
-    },
-    {
-        name: 'C#',
-      
-        fees: 4
-    },
-    {
-        name: 'C++',
-       
-        fees: 8
-    },
-];
-  
   return (
     <div className="App">
        
-      <div class="mx-auto container-fluid grid grid-cols-8 border-solid border-2 border-sky-500">
+      <div class="mx-auto container-fluid grid grid-cols-8 border-solid border-1 border-white-500">
         
-         
-        <div className='col-span-1  border-solid border-2 border-sky-500'>
+        {/* Replace border-2 border-sky-500 with border-1 border-white-500  */}
+        <div className='col-span-1  border-solid border-1 border-white-500'>
 
               <div class="flex items-center justify-center h-14 border-b">
                 <div>Athulya Homecare</div>
@@ -191,24 +421,26 @@ const pdata = [
           
         </div>
         
-        <div className='col-span-7 grid grid-cols-7  bg-[#F3F4F6] border-solid border-2 border-sky-500'>
-          <header class="col-span-7 h-16 bg-[#F3F4F6] border-solid border-2 border-sky-500">
+        <div className='col-span-7 grid grid-cols-7  bg-[#F3F4F6] border-solid border-1 border-white-500'>
+          <header class="col-span-7 h-16 bg-[#F3F4F6] border-solid border-1 border-white-500">
               <h1 class="text-center text-2xl"></h1>
           </header>
-          <main class="col-span-7 md:col-span-7  p-10 bg-[#F3F4F6] border-2 border-sky-500">
+           {/* Replace border-2 border-sky-500 with border-0 border-white-500  */}
+          <main class="col-span-7 md:col-span-7  p-10 bg-[#F3F4F6] border-0 border-white-500">
             {/* Filters */}
-              <div className="grid lg:grid-cols-5 gap-5 mb-16 border-solid border-2 border-sky-500">
-                <div className="rounded bg-white h-10 shadow-sm border-solid border-2 border-sky-500">
+              <div className="grid lg:grid-cols-5 gap-5 mb-16 border-solid border-1 border-white-500">
+                <div className="rounded bg-white h-10 shadow-sm border-solid border-1 border-white-500">
                   <Select
                     options={selectBranch}
                     name="branch_name"
                     className="branch_name"
                     placeholder="Select Branch"
-                
+                    onChange={handleBranch}
+                     
                   />
                     
                 </div>
-                <div className="rounded bg-white h-10 shadow-sm border-solid border-2 border-sky-500">
+                {/* <div className="rounded bg-white h-10 shadow-sm border-solid border-1 border-white-500">
                 <Select
                     options={selectDayorMonth}
                     name="day_or_month"
@@ -216,23 +448,25 @@ const pdata = [
                     placeholder="Day/Month"
                 
                   />
-                </div>
-                <div className="rounded bg-white h-10 shadow-sm border-solid border-2 border-sky-500 w-full">
+                </div> */}
+                <div className="rounded bg-white h-10 shadow-sm border-solid border-1 border-white-500 w-full">
                 
                   
-                    <DatePicker
+                   
+                <DatePicker
                       selected={fromDate}
                       onChange={handleFromDate}
                       className="border border-gray-300 h-9 rounded-md  px-2 outline-none w-full"
                       placeholderText="From Date"
                     />
 
+
                     
                   
                 
                 
                 </div>
-                <div className="rounded bg-white h-10 shadow-sm border-solid border-2 border-sky-500">
+                <div className="rounded bg-white h-10 shadow-sm border-solid border-1 border-white-500">
                 <DatePicker
                       selected={toDate}
                       onChange={handleToDate}
@@ -241,15 +475,15 @@ const pdata = [
                     />
 
                 </div>
-                <div className="rounded bg-white h-10 shadow-sm border-solid border-2 border-sky-500">
-                <button class=" hover:bg-blue-700 text-white font-semibold hover:text-white h-full w-full bg-blue-500 border border-blue-500 hover:border-transparent rounded">
-                  Button
+                <div className="rounded bg-white h-10 shadow-sm border-solid border-1 border-white-500">
+                <button class=" hover:bg-blue-700 text-white font-semibold hover:text-white h-full w-full bg-blue-500 border border-blue-500 hover:border-transparent rounded" onClick={fetchData}>
+                  Filter
                 </button>
                 </div>
               </div>
 
-              <div className="grid lg:grid-cols-3 gap-5 mb-16 border-solid border-2 border-sky-500">
-                <div className="rounded bg-white shadow-sm border-solid border-2 border-sky-500">
+              <div className="grid lg:grid-cols-3 gap-5 mb-16 border-solid border-1 border-white-500">
+                <div className="rounded bg-white shadow-sm border-solid border-1 border-white-500">
                   <div class="flex items-center p-5 bg-white shadow rounded-lg">
                     <div class="inline-flex flex-shrink-0 items-center justify-center h-16 w-16 text-purple-600 bg-purple-100 rounded-full mr-6">
                       <svg aria-hidden="true" fill="none" viewBox="0 0 24 24" stroke="currentColor" class="h-6 w-6">
@@ -257,12 +491,12 @@ const pdata = [
                       </svg>
                     </div>
                     <div>
-                      <span class="block text-2xl font-bold">25,000</span>
-                      <span class="block text-gray-500">Today Income</span>
+                      <span class="block text-2xl font-bold">{invoiceamount}</span>
+                      <span class="block text-gray-500"> Invoices</span>
                     </div>
                   </div>
                 </div>
-                <div className="rounded bg-white  shadow-sm border-solid border-2 border-sky-500">
+                <div className="rounded bg-white  shadow-sm border-solid border-1 border-white-500">
 
                   <div class="flex items-center p-5 bg-white shadow rounded-lg">
                     <div class="inline-flex flex-shrink-0 items-center justify-center h-16 w-16 text-blue-600 bg-blue-100 rounded-full mr-6">
@@ -271,14 +505,14 @@ const pdata = [
                       </svg>
                     </div>
                     <div>
-                      <span class="block text-2xl font-bold">1,50,000</span>
-                      <span class="block text-gray-500">Actual Income</span>
+                      <span class="block text-2xl font-bold" >{receiptamount}</span>
+                      <span class="block text-gray-500">Receipts</span>
                     </div>
                   </div>
 
                 </div>
 
-                <div className="rounded bg-white  shadow-sm border-solid border-2 border-sky-500">
+                <div className="rounded bg-white  shadow-sm border-solid border-1 border-white-500">
 
                   <div class="flex items-center p-5 bg-white shadow rounded-lg">
                     <div class="inline-flex flex-shrink-0 items-center justify-center h-16 w-16 text-green-600 bg-green-100 rounded-full mr-6">
@@ -287,77 +521,56 @@ const pdata = [
                       </svg>
                     </div>
                     <div>
-                      <span class="block text-2xl font-bold">10,00000</span>
-                      <span class="block text-gray-500">Income Received</span>
+                      <span class="block text-2xl font-bold">{remainingamount}</span>
+                      <span class="block text-gray-500">Remaining</span>
                     </div>
                   </div>
 
                 </div>
               </div>
               
-              <div className="grid lg:grid-cols-2 gap-5 mb-16 border-solid border-2 border-sky-500">
-                
-                <div className="grid lg:grid-cols-2  rounded bg-white  shadow-sm border-solid border-2 border-sky-500">
-                   
-                   <div className='col-span-1 flex justify-center p-10 border-solid border-2 border-sky-500'>
-                    
-                      <Doughnut data={data} options={options} />
-                   </div>
-                   <div className='col-span-1 border-solid border-2 p-10 border-sky-500'>
-                        {data.labels.map((label, index) => (
-                            <div key={index} className="flex items-center space-x-2">
-                              <div
-                                className="w-4 h-4"
-                                style={{
-                                  backgroundColor: data.datasets[0].backgroundColor[index],
-                                }}
-                              ></div>
-                              <span>{label}</span>
-                            </div>
-                          ))}
-                   </div>
-               
-                </div>
-                <div className="rounded bg-white p-6  shadow-sm border-solid border-2 border-sky-500">
+              
 
-                 <ResponsiveContainer width="100%" height="100%">
-                    {/* <BarChart data={data1}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="pv" fill="#8884d8" />
-                     
-                    </BarChart> */}
-                    <LineChart data={pdata} >
-                    <CartesianGrid />
-                      <XAxis dataKey="name" 
-                          interval={'preserveStartEnd'} />
-                      <YAxis></YAxis>
-                      <Legend />
-                      <Tooltip />
-                      
-                      <Line dataKey="fees"
-                          stroke="red" activeDot={{ r: 8 }} />
-                    </LineChart>
-            
-                  </ResponsiveContainer>
+              <div className="grid col-1 bg-white h-96 shadow-sm border-solid border-1 border-white-500">
                 
-                     
-                 
+                
+                <div class="rounded relative overflow-x-auto shadow-md sm:rounded-lg bg-white   border-solid border-2">
+                    
+                    <CanvasJSStockChart containerProps={containerProps} options = {stock_chart_options}/>
+  
                 </div>
+
+
               </div>
+               <br></br>
+
+               <div className="grid col-1 bg-white  shadow-sm border-solid border-1 border-white-500">
+                
+                
+                <div class="rounded relative overflow-x-auto shadow-md sm:rounded-lg bg-white   border-solid border-2">
+                    
+                   <CanvasJSChart options = {category_chart_options} />
+                
+
+                </div>
+
+
+              </div>
+               <br></br>
             {/* List of Data */}
-              <div className="grid col-1 bg-white h-96 shadow-sm border-solid border-2 border-sky-500">
+              <div className="grid col-1 bg-white  shadow-sm border-solid border-1 border-white-500">
                 
                 
               <div class="rounded relative overflow-x-auto shadow-md sm:rounded-lg bg-white   border-solid border-2">
+                  { selecttype==='Invoices' ?
                   <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
                       <thead class="text-xs text-black uppercase bg-white dark:bg-white dark:text-black border-b border-gray-100">
                           <tr>
                               <th scope="col" class="px-6 py-3 font-semibold">
                                   Sno
+                              </th>
+                              <th scope="col" class="px-6 py-3 font-semibold">
+                                  Branch
                               </th>
                               <th scope="col" class="px-6 py-3 font-semibold">
                                   Patient ID
@@ -375,6 +588,9 @@ const pdata = [
                                   Amount
                               </th>
                               <th scope="col" class="px-6 py-3 font-semibold">
+                                  Paid
+                              </th>
+                              <th scope="col" class="px-6 py-3 font-semibold">
                                   Status
                               </th>
                               <th scope="col" class="px-6 py-3 font-semibold">
@@ -384,125 +600,119 @@ const pdata = [
                           </tr>
                       </thead>
                       <tbody>
-                          {/* <tr class=" border-b border-gray-100 bg-white ">
-                              <th scope="row" class="px-6 py-4 font-normal text-black whitespace-nowrap ">
-                                  Apple MacBook Pro 17"
-                              </th>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  Silver
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  Laptop
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  $2999
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  <a href="#" class="font-medium text-blue-600 dark:text-blue-500 hover:underline">Edit</a>
-                              </td>
-                          </tr>
-                          <tr class=" border-b border-gray-100 bg-white ">
-                              <th scope="row" class="px-6 py-4 font-normal text-black whitespace-nowrap ">
-                                  Apple MacBook Pro 17"
-                              </th>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  Silver
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  Laptop
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  $2999
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  <a href="#" class="font-medium text-blue-600 dark:text-blue-500 hover:underline">Edit</a>
-                              </td>
-                          </tr>
-                          <tr class=" border-b border-gray-100 bg-white ">
-                              <th scope="row" class="px-6 py-4 font-normal text-black whitespace-nowrap ">
-                                  Apple MacBook Pro 17"
-                              </th>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  Silver
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  Laptop
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  $2999
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  <a href="#" class="font-medium text-blue-600 dark:text-blue-500 hover:underline">Edit</a>
-                              </td>
-                          </tr>
-                          <tr class=" border-b border-gray-100 bg-white ">
-                              <th scope="row" class="px-6 py-4 font-normal text-black whitespace-nowrap ">
-                                  Apple MacBook Pro 17"
-                              </th>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  Silver
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  Laptop
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  $2999
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  <a href="#" class="font-medium text-blue-600 dark:text-blue-500 hover:underline">Edit</a>
-                              </td>
-                          </tr>
-                          <tr class=" border-b border-gray-100 bg-white ">
-                              <th scope="row" class="px-6 py-4 font-normal text-black whitespace-nowrap ">
-                                  Apple MacBook Pro 17"
-                              </th>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  Silver
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  Laptop
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  $2999
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  <a href="#" class="font-medium text-blue-600 dark:text-blue-500 hover:underline">Edit</a>
-                              </td>
-                          </tr>
-                          <tr class=" border-b border-gray-100 bg-white ">
-                              <th scope="row" class="px-6 py-4 font-normal text-black whitespace-nowrap ">
-                                  Apple MacBook Pro 17"
-                              </th>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  Silver
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  Laptop
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  $2999
-                              </td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">
-                                  <a href="#" class="font-medium text-blue-600 dark:text-blue-500 hover:underline">Edit</a>
-                              </td>
-                          </tr> */}
-                          {tabledata.map((item, index) => (
+                          
+                          {tabledata1.map((item, index) => (
                           <React.Fragment key={index}>
                             <tr className='border-b border-gray-100 bg-white'>
                               <td class="px-6 py-4 text-black whitespace-nowrap">{index+1}</td>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.branch_name}</td>
                               <td class="px-6 py-4 text-black whitespace-nowrap">{item.patient_id}</td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.name}</td>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.first_name}</td>
                               <td class="px-6 py-4 text-black whitespace-nowrap">{item.invoice_no}</td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.invoice_date}</td>
-                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.amount}</td>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.dates}</td>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.total_amount}</td>
+                             
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.amount_paid}</td>
+                             
                               <td class="px-6 py-4 text-black whitespace-nowrap">{item.status}</td>
                               <td class="px-6 py-4 text-black whitespace-nowrap">
-                                <button onClick={() => toggleDetails(index)}>
-                                  {detailsVisible[index] ? 'Hide' : 'View'} Split-up
-                                </button>
+                              <button onClick={() => toggleDetails(item.id)}>
+                                {detailsVisible[item.id] ? 'Hide' : 'View'} Split-up
+                              </button>
                               </td>
                             </tr>
-                            {detailsVisible[index] && (
+                            {detailsVisible[item.id] && (
+                              <tr class="">
+                               
+                               <td colspan="10" className=''>
+                                <div class="grid grid-cols-5 gap-3 p-2 border-b border-gray-100 ">
+                
+                                  <div class="col-span-1  bg-white text-center font-semibold text-black">Sno</div>
+                                  <div class="col-span-1   bg-white text-center font-semibold text-black">Branch Name</div>
+                                  <div class="col-span-1   bg-white text-center font-semibold text-black">Schedule Date</div>
+                                  <div class="col-span-1   bg-white text-center font-semibold text-black">Service Name</div>
+                                  <div class="col-span-1  bg-white text-center font-semibold text-black">Amount</div>
+                                  
+                                </div>
+                                {splitup[item.id] && splitup[item.id].map((item, index) => (
+                                <div class="grid grid-cols-5 gap-3 p-2 border-b border-gray-100 " key={index}>
+                
+                                  <div class="col-span-1  bg-white text-center font-normal text-black">{index + 1}</div>
+                                  <div class="col-span-1   bg-white text-center font-normal text-black">{item.branch_name}</div>
+                                  <div class="col-span-1   bg-white text-center font-normal text-black">{item.schedule_date}</div>
+                                  <div class="col-span-1   bg-white text-center font-normal text-black">{item.service_name}</div>
+                                  <div class="col-span-1  bg-white text-center font-normal text-black">{item.amount}</div>
+                                  
+                                </div>
+                                 ))}
+                                
+                              
+                                    
+                              
+                                
+                               </td>
+                               
+                              </tr>
+                              
+                               
+                              
+                            )}
+
+                          
+                          </React.Fragment>
+                        ))}
+                      </tbody>
+                  </table>
+                   :
+                   <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                      <thead class="text-xs text-black uppercase bg-white dark:bg-white dark:text-black border-b border-gray-100">
+                          <tr>
+                              <th scope="col" class="px-6 py-3 font-semibold">
+                                  Sno
+                              </th>
+                              <th scope="col" class="px-6 py-3 font-semibold">
+                                  Branch
+                              </th>
+                              <th scope="col" class="px-6 py-3 font-semibold">
+                                  Patient ID
+                              </th>
+                              <th scope="col" class="px-6 py-3 font-semibold">
+                                  Patient Name
+                              </th>
+                              <th scope="col" class="px-6 py-3 font-semibold">
+                                  Service Name
+                              </th>
+                              <th scope="col" class="px-6 py-3 font-semibold">
+                                  Invoice No
+                              </th>
+                              <th scope="col" class="px-6 py-3 font-semibold">
+                                  Service Date
+                              </th>
+                              <th scope="col" class="px-6 py-3 font-semibold">
+                                  Amount
+                              </th>
+                              
+                             
+                          </tr>
+                      </thead>
+                      <tbody>
+                          
+                          {tabledata2.map((item, index) => (
+                          <React.Fragment key={index}>
+                            <tr className='border-b border-gray-100 bg-white'>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{index+1}</td>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.branch_name}</td>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.patient_id}</td>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.patient_name}</td>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.service_name}</td>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.invoice_no}</td>
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.service_date}</td>
+                             
+                              <td class="px-6 py-4 text-black whitespace-nowrap">{item.amount}</td>
+                             
+                      
+                            </tr>
+                            {/* {detailsVisible[index] && (
                               <tr class="border-b border-gray-100 bg-white">
                                 <th scope="col" class="px-6 py-3 font-semibold">
                                   Sno
@@ -517,15 +727,20 @@ const pdata = [
                                     Amount
                                 </th>
                               </tr>
-                            )}
+                            )} */}
+
+                           
                           </React.Fragment>
                         ))}
                       </tbody>
                   </table>
+                  }
               </div>
 
 
               </div>
+
+              
 
           </main>
           <footer class="col-span-7 p-10 bg-green-300 border-2 border-sky-500">
@@ -541,25 +756,25 @@ const pdata = [
        
       </div>
 
-      {/* <div className="grid lg:grid-cols-5 gap-5 mb-16 border-solid border-2 border-sky-500">
-        <div className="rounded bg-white h-10 shadow-sm border-solid border-2 border-sky-500">
+      {/* <div className="grid lg:grid-cols-5 gap-5 mb-16 border-solid border-1 border-white-500">
+        <div className="rounded bg-white h-10 shadow-sm border-solid border-1 border-white-500">
           
         </div>
-        <div className="rounded bg-white h-10 shadow-sm border-solid border-2 border-sky-500"></div>
-        <div className="rounded bg-white h-10 shadow-sm border-solid border-2 border-sky-500"></div>
-        <div className="rounded bg-white h-10 shadow-sm border-solid border-2 border-sky-500"></div>
-        <div className="rounded bg-white h-10 shadow-sm border-solid border-2 border-sky-500"></div>
+        <div className="rounded bg-white h-10 shadow-sm border-solid border-1 border-white-500"></div>
+        <div className="rounded bg-white h-10 shadow-sm border-solid border-1 border-white-500"></div>
+        <div className="rounded bg-white h-10 shadow-sm border-solid border-1 border-white-500"></div>
+        <div className="rounded bg-white h-10 shadow-sm border-solid border-1 border-white-500"></div>
       </div>
-      <div className="grid lg:grid-cols-3 gap-5 mb-16 border-solid border-2 border-sky-500">
-        <div className="rounded bg-white h-40 shadow-sm border-solid border-2 border-sky-500"></div>
-        <div className="rounded bg-white h-40 shadow-sm border-solid border-2 border-sky-500"></div>
-        <div className="rounded bg-white h-40 shadow-sm border-solid border-2 border-sky-500"></div>
+      <div className="grid lg:grid-cols-3 gap-5 mb-16 border-solid border-1 border-white-500">
+        <div className="rounded bg-white h-40 shadow-sm border-solid border-1 border-white-500"></div>
+        <div className="rounded bg-white h-40 shadow-sm border-solid border-1 border-white-500"></div>
+        <div className="rounded bg-white h-40 shadow-sm border-solid border-1 border-white-500"></div>
       </div>
-      <div className="grid lg:grid-cols-2 gap-5 mb-16 border-solid border-2 border-sky-500">
-        <div className="rounded bg-white h-40 shadow-sm border-solid border-2 border-sky-500"></div>
-        <div className="rounded bg-white h-40 shadow-sm border-solid border-2 border-sky-500"></div>
+      <div className="grid lg:grid-cols-2 gap-5 mb-16 border-solid border-1 border-white-500">
+        <div className="rounded bg-white h-40 shadow-sm border-solid border-1 border-white-500"></div>
+        <div className="rounded bg-white h-40 shadow-sm border-solid border-1 border-white-500"></div>
       </div>
-      <div className="grid col-1 bg-white h-96 shadow-sm border-solid border-2 border-sky-500"></div> */}
+      <div className="grid col-1 bg-white h-96 shadow-sm border-solid border-1 border-white-500"></div> */}
 
 
     </div>
