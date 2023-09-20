@@ -1,11 +1,12 @@
 import "./App.css";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import Select from "react-select";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import CanvasJSReact from "@canvasjs/react-stockcharts";
 import { URLDevelopment } from "./utilities/Url";
 import axios from "axios";
+import { Link } from "@mui/material";
 
 function App() {
   var CanvasJS = CanvasJSReact.CanvasJS;
@@ -69,7 +70,7 @@ function App() {
   useEffect(() => {
     fetchData();
     console.log(selecttype);
-  }, []);
+  }, [selecttype]);
 
   const handleFromDate = (date) => {
     setFromDate(date);
@@ -89,13 +90,15 @@ function App() {
     var yyyy = today.getFullYear();
 
     today = yyyy + "-" + mm + "-" + dd;
-    from_Date = !fromDate ? today : from_Date;
-    to_Date = !toDate ? today : to_Date;
 
     var from_Date = new Date(fromDate);
+
     var year = from_Date.getFullYear();
     var month = String(from_Date.getMonth() + 1).padStart(2, "0"); // Months are 0-indexed, so add 1 and pad with zeros
     var day = String(from_Date.getDate()).padStart(2, "0");
+
+    from_Date = !fromDate ? today : from_Date;
+    to_Date = !toDate ? today : to_Date;
 
     from_Date = `${year}-${month}-${day}`;
 
@@ -409,8 +412,8 @@ function App() {
                 </div>
               </li>
               <li>
-                <a
-                  href="#"
+                <Link
+                     to="/"
                   className="relative flex flex-row items-center pr-6 text-gray-600 border-l-4 border-transparent h-11 focus:outline-none hover:bg-gray-50 hover:text-gray-800 hover:border-indigo-500"
                 >
                   <span className="inline-flex items-center justify-center ml-4">
@@ -432,7 +435,7 @@ function App() {
                   <span className="ml-2 text-sm tracking-wide truncate">
                     Dashboard
                   </span>
-                </a>
+                </Link>
               </li>
 
               <li className="px-5">
@@ -443,8 +446,8 @@ function App() {
                 </div>
               </li>
               <li>
-                <a
-                  href="#"
+              <Link
+                     to="/"
                   className="relative flex flex-row items-center pr-6 text-gray-600 border-l-4 border-transparent h-11 focus:outline-none hover:bg-gray-50 hover:text-gray-800 hover:border-indigo-500"
                 >
                   <span className="inline-flex items-center justify-center ml-4">
@@ -466,11 +469,11 @@ function App() {
                   <span className="ml-2 text-sm tracking-wide truncate">
                     Profile
                   </span>
-                </a>
+                </Link>
               </li>
               <li>
-                <a
-                  href="#"
+              <Link
+                     to="/"
                   className="relative flex flex-row items-center pr-6 text-gray-600 border-l-4 border-transparent h-11 focus:outline-none hover:bg-gray-50 hover:text-gray-800 hover:border-indigo-500"
                 >
                   <span className="inline-flex items-center justify-center ml-4">
@@ -498,11 +501,11 @@ function App() {
                   <span className="ml-2 text-sm tracking-wide truncate">
                     Settings
                   </span>
-                </a>
+                </Link>
               </li>
               <li>
-                <a
-                  href="#"
+              <Link
+                     to="/"
                   className="relative flex flex-row items-center pr-6 text-gray-600 border-l-4 border-transparent h-11 focus:outline-none hover:bg-gray-50 hover:text-gray-800 hover:border-indigo-500"
                 >
                   <span className="inline-flex items-center justify-center ml-4">
@@ -524,7 +527,7 @@ function App() {
                   <span class="ml-2 text-sm tracking-wide truncate">
                     Logout
                   </span>
-                </a>
+                </Link>
               </li>
             </ul>
           </div>
@@ -532,7 +535,7 @@ function App() {
 
         <div className="col-span-7 grid grid-cols-7  bg-[#F3F4F6] border-solid border-1 border-white-500">
           <header className="col-span-7 h-16 bg-[#F3F4F6] border-solid border-1 border-white-500">
-            <h1 className="text-2xl text-center"></h1>
+            {/* <h1 className="text-2xl text-center"></h1> */}
           </header>
           {/* Replace border-2 border-sky-500 with border-0 border-white-500  */}
           <main className="col-span-7 md:col-span-7  p-10 bg-[#F3F4F6] border-0 border-white-500">
