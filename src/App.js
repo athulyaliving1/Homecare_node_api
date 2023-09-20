@@ -97,8 +97,7 @@ function App() {
     var month = String(from_Date.getMonth() + 1).padStart(2, "0"); // Months are 0-indexed, so add 1 and pad with zeros
     var day = String(from_Date.getDate()).padStart(2, "0");
 
-    from_Date = !fromDate ? today : from_Date;
-    to_Date = !toDate ? today : to_Date;
+  
 
     from_Date = `${year}-${month}-${day}`;
 
@@ -111,6 +110,10 @@ function App() {
     var category = dataPoint.label;
     var select_branch = branch.id;
 
+    from_Date = !fromDate ? today : from_Date;
+    to_Date = !toDate ? today : to_Date;
+
+    
     console.log(from_Date);
     console.log(to_Date);
     console.log(branch);
