@@ -21,6 +21,11 @@ router.post("/getserviceinvoicesplitup",ReportModule_1.getServiceInvoiceSplitup)
 
 router.post("/getsummary",ReportModule_1.getSummary);
 
+router.post("/getreceipts",ReportModule_1.getreceipts);
+router.post("/getpendingreceipts",ReportModule_1.getpendingreceipts);
+
 router.post("/getalldayinvoice",ReportModule_1.getalldayinvoice);
+router.post("/getcompletedschedules",ReportModule_1.getcompletedschedules);
+router.post("/getpendingschedules",ReportModule_1.getpendingschedules);
 
 module.exports = router; // export to use in server.js

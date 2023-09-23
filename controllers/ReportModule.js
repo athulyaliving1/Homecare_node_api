@@ -1,6 +1,7 @@
 var db = require("../db/connection.js").mysql_pool;
 const express = require('express');
 const bodyParser = require('body-parser');
+const { all } = require("../routes/allroutes.js");
 
 const Reports = (req, res) => {
 
@@ -39,7 +40,7 @@ const Reports = (req, res) => {
         const filter_branches=!(branch_id==undefined)?all_branches:branch_id;
 
         const query = `
-        SELECT sum(case_invoices.total_amount) as total_invoice_amount
+        SELECT  COALESCE(SUM(case_invoices.total_amount), 0) as total_invoice_amount
         FROM case_invoices 
         WHERE case_invoices.invoice_date >= ? AND case_invoices.invoice_date <= ? and status!='Cancelled'
        and case_invoices.branch_id in (?)`;
@@ -55,32 +56,109 @@ const Reports = (req, res) => {
         });
         //console.log(results);
 
-        const receipt_query=`SELECT sum(case_receipts.receipt_amount) as total_receipt_amount FROM case_receipts WHERE case_receipts.receipt_date >= ? AND case_receipts.receipt_date <= ? and case_receipts.receipt_type='Payment Received' and case_receipts.branch_id in (?)`;
-      
-        const receipt_results = await new Promise((resolve, reject) => {
-          db.query(receipt_query, [from_date, to_date, filter_branches], (err, results) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve(results);
-            }
-          });
+        const get_today_invoice_id_query="select distinct id from case_invoices where invoice_date between ? and ? and branch_id in (?)";
+        const today_invoice_ids=await new Promise((resolve,reject)=>{
+             db.query(get_today_invoice_id_query,[from_date,to_date,filter_branches],(err,results)=>{
+   
+               if(err)
+               {
+                 reject(err);
+               }else{
+                 resolve(results);
+               }
+   
+             });
         });
-        console.log(receipt_results[0].total_receipt_amount);
+   
+        console.log(today_invoice_ids);
+         
+        const all_total_invoice_ids=today_invoice_ids.map((tt)=>tt.id);
+        
+        if (Array.isArray(all_total_invoice_ids) && all_total_invoice_ids.length)
+        {
+          output=true;
+        }else{
+          output=false;
+        }
+        
+        console.log(output);
+        //const receipt_query=`SELECT sum(case_receipts.receipt_amount) as total_receipt_amount FROM case_receipts WHERE case_receipts.receipt_date >= ? AND case_receipts.receipt_date <= ? and case_receipts.receipt_type='Payment Received' and case_receipts.branch_id in (?)`;
+        
         const result_json={};
-        result_json['Invoice_Sum']=invoice_results[0].total_invoice_amount;
-        result_json['Receipt_Sum']=receipt_results[0].total_receipt_amount;
-        // const map1 = new Map();
-        // map1.set('Invoice_Sum',invoice_results[0].total_invoice_amount);
-        // map1.set('Receipt_Sum',receipt_results[0].total_receipt_amount);
-        // console.log(map1);
 
+        if(output==true)
+        {
+          const receipt_query=`select  COALESCE(SUM(receipt_amount), 0) as total_receipt_amount from case_receipts where date(created_at) between ? and ? and branch_id in (?) and item_id in (?)`;
+          const receipt_results = await new Promise((resolve, reject) => {
+            db.query(receipt_query, [from_date, to_date, filter_branches,all_total_invoice_ids], (err, results) => {
+              if (err) {
+                reject(err);
+              } else {
+                resolve(results);
+              }
+            });
+          });
+          result_json['Invoice_Sum']=invoice_results[0].total_invoice_amount;
+          result_json['Receipt_Sum']=receipt_results[0].total_receipt_amount;
+
+        }else{
+          result_json['Invoice_Sum']=0;
+          result_json['Receipt_Sum']=0;
+        }
+        
+        const get_completed_schedules_query="SELECT sum(case_schedules.amount) as total_completed_schedules_amount FROM `case_schedules` join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id where schedule_date>=? and schedule_date<=? and case_schedules.branch_id in (?) and case_schedules.membership_type='Daily' and case_schedules.status='Completed' and bill_type='Countable' and chargeable=1 and case_schedules.id not in (select distinct case_invoice_items.item_id from case_invoice_items where date(case_invoice_items.created_at)>=? and date(case_invoice_items.created_at)<=?)";
+        const get_completed_schedules=await new Promise((resolve,reject)=>{
+             db.query(get_completed_schedules_query,[from_date,to_date,filter_branches,from_date,to_date],(err,results)=>{
+   
+               if(err)
+               {
+                 reject(err);
+               }else{
+                 resolve(results);
+               }
+   
+             });
+        });
+
+        const pending_schedules_query="SELECT sum(case_schedules.amount) as total_pending_schedules_amount FROM `case_schedules` join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id where schedule_date>=? and schedule_date<=? and case_schedules.branch_id in (?) and case_schedules.membership_type='Daily' and case_schedules.status='Pending' and bill_type='Countable'  and chargeable=1 and case_schedules.id not in (select distinct case_invoice_items.item_id from case_invoice_items where date(case_invoice_items.created_at)>=? and date(case_invoice_items.created_at)<=?)";
+     
+        const get_pending_schedules=await new Promise((resolve,reject)=>{
+
+         db.query(pending_schedules_query,[from_date,to_date,filter_branches,from_date,to_date],(err,results)=>{
+
+          if(err)
+          {
+            reject(err);
+          }else{
+            resolve(results)
+          }
+         
+        });
+          
+
+      });
+
+        result_json['Completed_Schedule_Sum']=get_completed_schedules[0].total_completed_schedules_amount;
+        result_json['Estimated_Sum']=result_json['Invoice_Sum'] + result_json['Completed_Schedule_Sum'];
+        result_json['Pending_Schedules_Sum']=get_pending_schedules[0].total_pending_schedules_amount;
+       //console.log(get_completed_schedules);
+       
         res.status(200).json({success:true,data:result_json});
+      
+        
+        
+        
+        
+
+        
+
+       
 
       //console.log("Total Amount Sum: $" + totalAmountSum.toFixed(2)); // Rounded to 2 decimal places
 
     }catch(error){
-
+      
+      res.status(200).json({success:false,data:error});
     }
   }
 
@@ -172,7 +250,7 @@ const Reports = (req, res) => {
       if (!from_date || !to_date) {
         return res.status(400).json({ error: 'Please provide both start and end dates' });
       }
-  
+     console.log("branchesssss:-"+branch_id);
      const default_branches=await new Promise((resolve,reject)=>{
      
       db.query("select distinct id from master_branches",(err, results) => {
@@ -186,8 +264,8 @@ const Reports = (req, res) => {
      });
      all_branches=default_branches.map(tt=>tt.id);
      
-     const filter_branches=!(branch_id==undefined)?all_branches:branch_id;
-
+     const filter_branches=(branch_id)?all_branches:branch_id;
+     console.log("branchess..:;"+filter_branches);
       const query = `
         SELECT case_invoices.id,master_branches.branch_name,patients.patient_id,patients.first_name,case_invoices.invoice_no,date_format(case_invoices.invoice_date,'%Y-%m-%d') as dates,case_invoices.total_amount,case_invoices.amount_paid,case_invoices.status 
         FROM case_invoices 
@@ -218,6 +296,272 @@ const Reports = (req, res) => {
 
     }catch(error){
        console.log(error);
+    }
+  }
+
+  const getreceipts= async (req,res,next)=>{
+
+    try{
+
+      
+      const { from_date, to_date,branch_id } = req.query;
+
+     
+      if (!from_date || !to_date) {
+        return res.status(400).json({ error: 'Please provide both start and end dates' });
+      }
+     
+     const default_branches=await new Promise((resolve,reject)=>{
+     
+      db.query("select distinct id from master_branches",(err, results) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(results);
+        }
+      });
+
+     });
+     all_branches=default_branches.map(tt=>tt.id);
+     
+     const filter_branches=!(branch_id==undefined)?all_branches:branch_id;
+     console.log(from_date+" "+to_date+" "+filter_branches);
+     const query="select distinct id from case_invoices where invoice_date between ? and ? and branch_id in (?) and status!='Cancelled'";
+     const today_invoice_ids=await new Promise((resolve,reject)=>{
+          db.query(query,[from_date,to_date,filter_branches],(err,results)=>{
+
+            if(err)
+            {
+              reject(err);
+            }else{
+              resolve(results);
+            }
+
+          });
+     });
+
+     //console.log(today_invoice_ids);
+    //  const receipts_query="select case_invoices.id,case_invoices.patient_id,sum(case_receipts.receipt_amount) from case_receipts join case_invoices on case_invoices.id=case_receipts.item_id where case_invoices.invoice_date between ? and ? and case_invoices.branch_id=? group by case_receipts.item_id";
+    //  const gettodayreceiptsforinvoices=await new Promise((resolve,reject)=>{
+    //   db.query(receipts_query,[from_date,to_date,branch_id],(err,results)=>{
+
+    //     if(err)
+    //     {
+    //       reject(err);
+    //     }else{
+    //       resolve(results);
+    //     }
+
+    //   });
+    // });
+    const all_today_invoice_ids=today_invoice_ids.map(tt=>tt.id);
+    //const receipts_created_query="select * from case_invoices join case_receipts on case_invoices.id=case_receipts.item_id where case_receipts.item_id in (?) and case_invoices.invoice_date >=? and case_invoices.invoice_date<=? and case_invoices.branch_id in (?)"
+    const receipts_created_query="select master_branches.branch_name,patients.patient_id,patients.first_name,case_invoices.invoice_no,date_format(case_invoices.invoice_date,'%Y-%m-%d') as dates,case_invoices.total_amount,case_invoices.amount_paid,case_invoices.status from case_invoices join master_branches on case_invoices.branch_id=master_branches.id join patients on case_invoices.patient_id=patients.id where case_invoices.id in (select distinct item_id  from case_receipts where date(created_at) between ? and ? and branch_id in (?) and item_id in (?)) and case_invoices.status!='Cancelled'"
+    const today_receipts_created=await new Promise((resolve,reject)=>{
+      db.query(receipts_created_query,[from_date,to_date,filter_branches,all_today_invoice_ids],(err,results)=>{
+
+        if(err)
+        {
+          reject(err);
+        }else{
+          resolve(results);
+        }
+
+      });
+    });
+
+
+
+     console.log(today_receipts_created);  
+
+     
+     
+      res.status(200).json({ success: true, data: today_receipts_created });
+
+
+    }catch(error){
+       console.log(error);
+    }
+  }
+
+  const getpendingreceipts= async (req,res,next)=>{
+
+    try{
+
+      
+      const { from_date, to_date,branch_id } = req.query;
+
+     
+      if (!from_date || !to_date) {
+        return res.status(400).json({ error: 'Please provide both start and end dates' });
+      }
+     
+     const default_branches=await new Promise((resolve,reject)=>{
+     
+      db.query("select distinct id from master_branches",(err, results) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(results);
+        }
+      });
+
+     });
+     all_branches=default_branches.map(tt=>tt.id);
+     
+     const filter_branches=!(branch_id==undefined)?all_branches:branch_id;
+     console.log(from_date+" "+to_date+" "+filter_branches);
+     const query="select distinct id from case_invoices where invoice_date between ? and ? and branch_id in (?)";
+     const today_invoice_ids=await new Promise((resolve,reject)=>{
+          db.query(query,[from_date,to_date,filter_branches],(err,results)=>{
+
+            if(err)
+            {
+              reject(err);
+            }else{
+              resolve(results);
+            }
+
+          });
+     });
+
+  
+    const all_today_invoice_ids=today_invoice_ids.map(tt=>tt.id);
+    //const receipts_created_query="select * from case_invoices join case_receipts on case_invoices.id=case_receipts.item_id where case_receipts.item_id in (?) and case_invoices.invoice_date >=? and case_invoices.invoice_date<=? and case_invoices.branch_id in (?)"
+    const receipts_created_query="select master_branches.branch_name,patients.patient_id,patients.first_name,case_invoices.invoice_no,date_format(case_invoices.invoice_date,'%Y-%m-%d') as dates,case_invoices.total_amount,case_invoices.amount_paid,case_invoices.status from case_invoices join master_branches on case_invoices.branch_id=master_branches.id join patients on case_invoices.patient_id=patients.id where case_invoices.id  not in (select distinct item_id  from case_receipts where date(created_at) between ? and ? and branch_id in (?) and item_id  in (?)) and case_invoices.invoice_date BETWEEN ? and ? and case_invoices.status!='Cancelled'"
+    const today_receipts_created=await new Promise((resolve,reject)=>{
+      db.query(receipts_created_query,[from_date,to_date,filter_branches,all_today_invoice_ids,from_date,to_date],(err,results)=>{
+
+        if(err)
+        {
+          reject(err);
+        }else{
+          resolve(results);
+        }
+
+      });
+    });
+
+
+
+     console.log(today_receipts_created);  
+
+     
+     
+      res.status(200).json({ success: true, data: today_receipts_created });
+
+
+    }catch(error){
+       console.log(error);
+    }
+  }
+
+  const getcompletedschedules=async (req,res,next)=>{
+     
+    try{
+         
+      const {from_date,to_date,branch_id}=req.query;
+      if (!from_date || !to_date) {
+        return res.status(400).json({ error: 'Please provide both start and end dates' });
+      }
+  
+     const default_branches=await new Promise((resolve,reject)=>{
+     
+      db.query("select distinct id from master_branches",(err, results) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(results);
+        }
+      });
+
+     });
+
+     all_branches=default_branches.map(tt=>tt.id);
+     
+     const filter_branches=!(branch_id)?all_branches:branch_id;
+
+     const filter=from_date+" "+to_date+" "+filter_branches;
+
+     const data_query="SELECT patients.first_name,master_branches.branch_name,master_services.service_name,date_format(case_schedules.schedule_date,'%Y-%m-%d') as schedule_date,case_schedules.membership_type,case_schedules.assigned_tasks,case_schedules.amount,case_schedules.status FROM `case_schedules` join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id where schedule_date>=? and schedule_date<=? and case_schedules.branch_id in (?) and case_schedules.membership_type='Daily' and case_schedules.status='Completed' and bill_type='Countable'  and chargeable=1 and case_schedules.id not in (select distinct case_invoice_items.item_id from case_invoice_items where date(case_invoice_items.created_at)>=? and date(case_invoice_items.created_at)<=?)";
+     
+     const fetch_data=await new Promise((resolve,reject)=>{
+
+         db.query(data_query,[from_date,to_date,filter_branches,from_date,to_date],(err,results)=>{
+
+          if(err)
+          {
+            reject(err);
+          }else{
+            resolve(results)
+          }
+         
+        });
+          
+
+      });
+
+     
+      
+
+     return res.status(200).json({success:fetch_data});
+
+    }catch(error)
+    {
+      return res.status(400).json({error:"Error in fetching completed schedules"});
+    }
+  }
+
+  const getpendingschedules=async (req,res,next)=>{
+     
+    try{
+         
+      const {from_date,to_date,branch_id}=req.query;
+      if (!from_date || !to_date) {
+        return res.status(400).json({ error: 'Please provide both start and end dates' });
+      }
+  
+     const default_branches=await new Promise((resolve,reject)=>{
+     
+      db.query("select distinct id from master_branches",(err, results) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(results);
+        }
+      });
+
+     });
+
+     all_branches=default_branches.map(tt=>tt.id);
+     
+     const filter_branches=!(branch_id)?all_branches:branch_id;
+
+     const filter=from_date+" "+to_date+" "+filter_branches;
+
+     const data_query="SELECT patients.first_name,master_branches.branch_name,master_services.service_name,date_format(case_schedules.schedule_date,'%Y-%m-%d') as schedule_date,case_schedules.membership_type,case_schedules.assigned_tasks,case_schedules.amount,case_schedules.status FROM `case_schedules` join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id where schedule_date>=? and schedule_date<=? and case_schedules.branch_id in (?) and case_schedules.membership_type='Daily' and case_schedules.status='Pending' and bill_type='Countable'  and chargeable=1 and case_schedules.id not in (select distinct case_invoice_items.item_id from case_invoice_items where date(case_invoice_items.created_at)>=? and date(case_invoice_items.created_at)<=?)";
+     
+     const pending_schedules=await new Promise((resolve,reject)=>{
+
+         db.query(data_query,[from_date,to_date,filter_branches,from_date,to_date],(err,results)=>{
+
+          if(err)
+          {
+            reject(err);
+          }else{
+            resolve(results)
+          }
+         
+        });
+          
+
+      });
+
+     return res.status(200).json({success:pending_schedules});
+
+    }catch(error)
+    {
+      return res.status(400).json({error:"Error in fetching completed schedules"});
     }
   }
 
@@ -458,5 +802,9 @@ const Reports = (req, res) => {
     getServiceInvoice,
     getSummary,
     getalldayinvoice,
-    getServiceInvoiceSplitup
+    getServiceInvoiceSplitup,
+    getreceipts,
+    getpendingreceipts,
+    getcompletedschedules,
+    getpendingschedules
   }
