@@ -259,7 +259,7 @@ const getInvoices = async (req, res, next) => {
     });
     all_branches = default_branches.map(tt => tt.id);
 
-    const filter_branches = (branch_id) ? all_branches : branch_id;
+    const filter_branches = !(branch_id) ? all_branches : branch_id;
     console.log("branchess..:;" + filter_branches);
     const query1 = `
         SELECT case_invoices.id,master_branches.branch_name,patients.patient_id,patients.first_name,case_invoices.invoice_no,date_format(case_invoices.invoice_date,'%Y-%m-%d') as dates,case_invoices.total_amount,case_invoices.amount_paid,case_invoices.status 
@@ -316,7 +316,7 @@ const getInvoicesPieChart = async (req, res, next) => {
       })
     })
     all_branches = default_branches.map(tt => tt.id);
-    const filter_branches = (branch_id) ? all_branches : branch_id;
+    const filter_branches = !(branch_id) ? all_branches : branch_id;
     console.log("branchess..:;" + filter_branches);
     const query1 = `SELECT
   branch_sums.branch_name,
