@@ -18,12 +18,12 @@ app.use(cors());
 
 const routes = require("./routes/allroutes");
 
-const PORT = process.env.PORT || 4042;
+const PORT = process.env.PORT || 4041;
 app.use("/", routes)
 
 
 app.use(function (req, res, next) {
-  console.log("api running at port 4042");
+  console.log("api running at port 4041");
 })
 
 
