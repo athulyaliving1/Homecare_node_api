@@ -18,7 +18,7 @@ app.use(cors());
 
 const routes = require("./routes/allroutes");
 
-const PORT = process.env.PORT || 4041;
+const PORT = process.env.PORT || 4042;
 app.use("/", routes)
 
 
