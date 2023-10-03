@@ -32,8 +32,24 @@ const masterServices = (req, res) => {
 }
 
 
+const masterCategories = (req, res) => {
+
+  const query = `SELECT * FROM master_service_category`;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error("Error fetching services:", err);
+      res.status(500).send("An error occurred");
+    } else {
+      res.json(results);
+      console.log(results);
+    }
+  })
+}
+
 
 module.exports = {
   branchlocation,
-  masterServices
+  masterServices,
+  masterCategories
 };

@@ -35,5 +35,6 @@ router.post("/getschedulesummary", ReportModule_1.getschedulesummary);
 
 
 router.get("/getmasterservices", BranchModule.masterServices);
+router.get("/getmastercategories", BranchModule.masterCategories);
 
 module.exports = router; // export to use in server.js
