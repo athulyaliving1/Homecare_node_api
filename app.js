@@ -6,7 +6,7 @@ var logger = require("morgan");
 var bodyParser = require("body-parser");
 var cors = require("cors");
 var db = require("./db/connection").mysql_pool;
-var port = 4041;
+var port = 4042;
 const https = require("https");
 const fs = require("fs");
 var app = express();
@@ -23,7 +23,7 @@ app.use("/", routes)
 
 
 app.use(function (req, res, next) {
-  console.log("api running at port 4041");
+  console.log("api running at port 4042");
 })
 
 
