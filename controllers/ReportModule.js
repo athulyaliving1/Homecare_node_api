@@ -35,9 +35,7 @@ const getSummary = async (req, res, next) => {
     });
     all_branches = default_branches.map((tt) => tt.id);
 
-    const filter_branches = !(branch_id == undefined)
-      ? all_branches
-      : branch_id;
+    const filter_branches = !(branch_id) ? all_branches : branch_id;
 
     const query = `
         SELECT  COALESCE(SUM(case_invoices.total_amount), 0) as total_invoice_amount
