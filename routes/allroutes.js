@@ -31,6 +31,7 @@ router.post("/getcompletedschedules", ReportModule_1.getcompletedschedules);
 router.post("/getpendingschedules", ReportModule_1.getpendingschedules);
 router.post("/getschedulerevenue", ReportModule_1.getschedulerevenue);
 router.post("/getschedulecategoryrevenue", ReportModule_1.getschedulecategoryrevenue);
+router.post("/getschedulesubcategoryrevenue", ReportModule_1.getschedulesubcategoryrevenue);
 router.post("/getschedulesummary", ReportModule_1.getschedulesummary);
 
 
