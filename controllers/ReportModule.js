@@ -564,18 +564,18 @@ const getschedulecategoryrevenue = async (req, res, next) => {
 };
 
 const getschedulesubcategoryrevenue = async (req, res, next) => {
-<<<<<<< HEAD
-  try {
-    const { from_date, to_date, branch_id, category_required } = req.query;
+// <<<<<<< HEAD
+  // try {
+  //   const { from_date, to_date, branch_id, category_required } = req.query;
 
-    if (!from_date || !to_date) {
-      return res
-        .status(400)
-        .json({ error: "Please provide both start and end dates" });
-    }
+  //   if (!from_date || !to_date) {
+  //     return res
+  //       .status(400)
+  //       .json({ error: "Please provide both start and end dates" });
+  //   }
 
-    const default_branches = await new Promise((resolve, reject) => {
-=======
+  //   const default_branches = await new Promise((resolve, reject) => {
+// =======
 
   try {
 
@@ -588,7 +588,7 @@ const getschedulesubcategoryrevenue = async (req, res, next) => {
 
     const default_branches = await new Promise((resolve, reject) => {
 
->>>>>>> cb23a2f983cdb7db0e072814b1ce192b71203035
+// >>>>>>> cb23a2f983cdb7db0e072814b1ce192b71203035
       db.query("select distinct id from master_branches", (err, results) => {
         if (err) {
           reject(err);
@@ -596,9 +596,9 @@ const getschedulesubcategoryrevenue = async (req, res, next) => {
           resolve(results);
         }
       });
-<<<<<<< HEAD
+
     });
-    all_branches = default_branches.map((tt) => tt.id);
+    // all_branches = default_branches.map((tt) => tt.id);
 
     //Some Category will be selected default so no need of delfault category
 
@@ -627,39 +627,40 @@ const getschedulesubcategoryrevenue = async (req, res, next) => {
     console.log(error);
   }
 };
-=======
+    
+// =======
 
-    });
-    all_branches = default_branches.map(tt => tt.id);
+//     });
+//     all_branches = default_branches.map(tt => tt.id);
 
-  //Some Category will be selected default so no need of delfault category
+//   //Some Category will be selected default so no need of delfault category
 
-    all_branches = default_branches.map(tt => tt.id);
+//     all_branches = default_branches.map(tt => tt.id);
    
-    const filter_branches = !(branch_id) ? all_branches : branch_id;
+//     const filter_branches = !(branch_id) ? all_branches : branch_id;
   
-    const query=`SELECT master_services.service_name as label,sum(case_schedules.amount) as y FROM case_schedules join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id  join master_service_category on master_services.category_id=master_service_category.id where case_schedules.schedule_date BETWEEN ? and ? and case_schedules.status='Completed' and case_schedules.branch_id in (?) and master_services.category_id in (?) group by master_services.id`;
-    const results = await new Promise((resolve, reject) => {
-      db.query(query, [from_date, to_date, filter_branches, category_required], (err, results) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
-        }
-      });
-    });
-    console.log(results);
+//     const query=`SELECT master_services.service_name as label,sum(case_schedules.amount) as y FROM case_schedules join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id  join master_service_category on master_services.category_id=master_service_category.id where case_schedules.schedule_date BETWEEN ? and ? and case_schedules.status='Completed' and case_schedules.branch_id in (?) and master_services.category_id in (?) group by master_services.id`;
+//     const results = await new Promise((resolve, reject) => {
+//       db.query(query, [from_date, to_date, filter_branches, category_required], (err, results) => {
+//         if (err) {
+//           reject(err);
+//         } else {
+//           resolve(results);
+//         }
+//       });
+//     });
+//     console.log(results);
 
 
 
-    res.status(200).json({ success: true, data: results });
+//     res.status(200).json({ success: true, data: results });
 
 
-  } catch (error) {
-    console.log(error);
-  }
-}
->>>>>>> cb23a2f983cdb7db0e072814b1ce192b71203035
+//   } catch (error) {
+//     console.log(error);
+//   }
+// }
+
 
 const getschedulesummary = async (req, res, next) => {
   try {
