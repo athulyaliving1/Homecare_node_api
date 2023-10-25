@@ -35,7 +35,7 @@ const getSummary = async (req, res, next) => {
     });
     all_branches = default_branches.map((tt) => tt.id);
 
-    const filter_branches = !(branch_id) ? all_branches : branch_id;
+    const filter_branches = !branch_id ? all_branches : branch_id;
 
     const query = `
         SELECT  COALESCE(SUM(case_invoices.total_amount), 0) as total_invoice_amount
@@ -140,12 +140,30 @@ const getSummary = async (req, res, next) => {
       );
     });
 
+    const unapprovedFunds =
+      "SELECT SUM(case_receipts.receipt_amount) AS unallocated_fund, master_branches.branch_name FROM case_receipts JOIN master_branches ON master_branches.id = case_receipts.branch_id WHERE case_receipts.receipt_date BETWEEN ? AND ? AND case_receipts.branch_id IN (?) AND case_receipts.status = 'Not_Acknowledged' GROUP BY master_branches.branch_name;";
+
+    const get_unapproved_funds = await new Promise((resolve, reject) => {
+      db.query(
+        unapprovedFunds,
+        [from_date, to_date, filter_branches],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
+        }
+      );
+    });
+
     result_json["Completed_Schedule_Sum"] =
       get_completed_schedules[0].total_completed_schedules_amount;
     result_json["Estimated_Sum"] =
       result_json["Invoice_Sum"] + result_json["Completed_Schedule_Sum"];
     result_json["Pending_Schedules_Sum"] =
       get_pending_schedules[0].total_pending_schedules_amount;
+    result_json["Unallocated_Funds"] = get_unapproved_funds[0].unallocated_fund;
     //console.log(get_completed_schedules);
 
     res.status(200).json({ success: true, data: result_json });
@@ -523,11 +541,60 @@ const getschedulecategoryrevenue = async (req, res, next) => {
     console.log(filter_categories);
     //const query=`SELECT master_branches.branch_name ,master_service_category.category_name,count(case_schedules.service_required) as service_required,sum(case_schedules.amount) as amount FROM case_schedules join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id  join master_service_category on master_services.category_id=master_service_category.id where case_schedules.schedule_date BETWEEN ? and ? and case_schedules.status='Completed' and case_schedules.branch_id in (?) and master_services.category_id in (?) group by master_services.category_id`;
 
-    const query = `SELECT master_service_category.category_name as label,sum(case_schedules.amount) as y FROM case_schedules join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id  join master_service_category on master_services.category_id=master_service_category.id where case_schedules.schedule_date BETWEEN ? and ? and case_schedules.status='Completed' and case_schedules.branch_id in (?) and master_services.category_id in (?) group by master_services.category_id`;
+    const query = `SELECT master_services.category_id,master_service_category.category_name as label,sum(case_schedules.amount) as y FROM case_schedules join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id  join master_service_category on master_services.category_id=master_service_category.id where case_schedules.schedule_date BETWEEN ? and ? and case_schedules.status='Completed' and case_schedules.branch_id in (?) and master_services.category_id in (?) group by master_services.category_id`;
     const results = await new Promise((resolve, reject) => {
       db.query(
         query,
         [from_date, to_date, filter_branches, filter_categories],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
+        }
+      );
+    });
+    console.log(results);
+
+    res.status(200).json({ success: true, data: results });
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+const getschedulesubcategoryrevenue = async (req, res, next) => {
+  try {
+    const { from_date, to_date, branch_id, category_required } = req.query;
+
+    if (!from_date || !to_date) {
+      return res
+        .status(400)
+        .json({ error: "Please provide both start and end dates" });
+    }
+
+    const default_branches = await new Promise((resolve, reject) => {
+      db.query("select distinct id from master_branches", (err, results) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(results);
+        }
+      });
+    });
+    all_branches = default_branches.map((tt) => tt.id);
+
+    //Some Category will be selected default so no need of delfault category
+
+    all_branches = default_branches.map((tt) => tt.id);
+
+    const filter_branches = !branch_id ? all_branches : branch_id;
+
+    const query = `SELECT master_services.service_name as label,sum(case_schedules.amount) as y FROM case_schedules join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id  join master_service_category on master_services.category_id=master_service_category.id where case_schedules.schedule_date BETWEEN ? and ? and case_schedules.status='Completed' and case_schedules.branch_id in (?) and master_services.category_id in (?) group by master_services.id`;
+    const results = await new Promise((resolve, reject) => {
+      db.query(
+        query,
+        [from_date, to_date, filter_branches, category_required],
         (err, results) => {
           if (err) {
             reject(err);
@@ -1088,6 +1155,68 @@ const ActiveClients = async (req, res) => {
   }
 };
 
+
+const getUnapprovedFunds = async (req, res, next) => {
+  try {
+    const { from_date, to_date, branch_id } = req.query;
+
+    if (!from_date || !to_date) {
+      return res
+        .status(400)
+        .json({ error: "Please provide both start and end dates" });
+    }
+
+    const default_branches = await new Promise((resolve, reject) => {
+      db.query("select distinct id from master_branches", (err, results) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(results);
+        }
+      });
+    });
+    all_branches = default_branches.map((tt) => tt.id);
+
+    const filter_branches = !(branch_id == undefined) ? all_branches : branch_id;
+
+
+    const query = `
+      SELECT 
+        master_branches.branch_name,
+        patients.first_name,
+        patients.patient_id,
+        receipt_type,
+        payment_mode,
+        reference_no,
+        receipt_no,
+        receipt_date,
+        receipt_amount
+      FROM case_receipts
+      JOIN master_branches ON master_branches.id = case_receipts.branch_id
+      JOIN patients ON patients.id = case_receipts.id
+      WHERE
+        case_receipts.receipt_date BETWEEN ? AND ?
+        AND case_receipts.branch_id IN (?)
+        AND case_receipts.status = 'Not_Acknowledged'
+    `;
+
+    const results = await new Promise((resolve, reject) => {
+      db.query(query, [from_date, to_date, filter_branches], (err, results) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(results);
+        }
+      });
+    });
+
+    res.status(200).json({ success: true, data: results });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: error });
+  }
+};
+
 module.exports = {
   Reports,
   ActiveClients,
@@ -1103,7 +1232,9 @@ module.exports = {
   getpendingschedules,
   getschedulerevenue,
   getschedulecategoryrevenue,
+  getschedulesubcategoryrevenue,
   getschedulesummary,
   getInvoicesPieChart,
   getServiceCategoryPieChart,
+  getUnapprovedFunds,
 };

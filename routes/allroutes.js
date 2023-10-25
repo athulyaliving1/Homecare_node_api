@@ -32,11 +32,12 @@ router.post("/getpendingschedules", ReportModule_1.getpendingschedules);
 router.post("/getschedulerevenue", ReportModule_1.getschedulerevenue);
 router.post("/getschedulecategoryrevenue", ReportModule_1.getschedulecategoryrevenue);
 router.post("/getschedulesummary", ReportModule_1.getschedulesummary);
+router.post("/getschedulesubcategoryrevenue", ReportModule_1.getschedulesubcategoryrevenue);
 
 
 router.get("/getmasterservices", BranchModule.masterServices);
 router.get("/getmastercategories", BranchModule.masterCategories);
 router.post("/getservicecategorybranch", ReportModule_1.getServiceCategoryPieChart);
-
+router.post("/getunapprovedfunds", ReportModule_1.getUnapprovedFunds);
 
 module.exports = router; // export to use in server.js
