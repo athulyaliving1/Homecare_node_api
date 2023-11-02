@@ -1,38 +1,43 @@
 var db = require("../db/connection.js").mysql_pool;
+const util = require("util");
+const dbQueryAsync = util.promisify(db.query);
 
 const Reports = (req, res) => {
-
-  var query1 = "SELECT CASE WHEN DAYOFMONTH(CURRENT_DATE) > 25 THEN DATEDIFF(DATE_FORMAT(DATE_ADD(CURRENT_DATE, INTERVAL 1 MONTH), '%Y-%m-25'), CURRENT_DATE)+1 ELSE DATEDIFF(DATE_FORMAT(CURRENT_DATE, '%Y-%m-25'),CURRENT_DATE)+1 END AS days_until_adjusted_end_date";
-  var query2 = "SELECT patients.id,patients.patient_id,patients.first_name,service_request_id,schedule_id,(amount * (SELECT CASE WHEN DAYOFMONTH(CURRENT_DATE) > 25 THEN DATEDIFF(DATE_FORMAT(DATE_ADD(CURRENT_DATE, INTERVAL 1 MONTH), '%Y-%m-25'), CURRENT_DATE)+1 ELSE DATEDIFF(DATE_FORMAT(CURRENT_DATE, '%Y-%m-25'),CURRENT_DATE)+1 END AS days_until_adjusted_end_date)) as projected_amount,(SELECT CASE WHEN DAYOFMONTH(CURRENT_DATE) > 25 THEN DATEDIFF(DATE_FORMAT(DATE_ADD(CURRENT_DATE, INTERVAL 1 MONTH), '%Y-%m-25'), CURRENT_DATE)+1 ELSE DATEDIFF(DATE_FORMAT(CURRENT_DATE, '%Y-%m-25'),CURRENT_DATE)+1 END AS days_until_adjusted_end_date) as remaning_days FROM `case_schedules` join patients on case_schedules.patient_id=patients.id where schedule_date=CURRENT_DATE and status!='Cancelled' and chargeable=1";
+  var query1 =
+    "SELECT CASE WHEN DAYOFMONTH(CURRENT_DATE) > 25 THEN DATEDIFF(DATE_FORMAT(DATE_ADD(CURRENT_DATE, INTERVAL 1 MONTH), '%Y-%m-25'), CURRENT_DATE)+1 ELSE DATEDIFF(DATE_FORMAT(CURRENT_DATE, '%Y-%m-25'),CURRENT_DATE)+1 END AS days_until_adjusted_end_date";
+  var query2 =
+    "SELECT patients.id,patients.patient_id,patients.first_name,service_request_id,schedule_id,(amount * (SELECT CASE WHEN DAYOFMONTH(CURRENT_DATE) > 25 THEN DATEDIFF(DATE_FORMAT(DATE_ADD(CURRENT_DATE, INTERVAL 1 MONTH), '%Y-%m-25'), CURRENT_DATE)+1 ELSE DATEDIFF(DATE_FORMAT(CURRENT_DATE, '%Y-%m-25'),CURRENT_DATE)+1 END AS days_until_adjusted_end_date)) as projected_amount,(SELECT CASE WHEN DAYOFMONTH(CURRENT_DATE) > 25 THEN DATEDIFF(DATE_FORMAT(DATE_ADD(CURRENT_DATE, INTERVAL 1 MONTH), '%Y-%m-25'), CURRENT_DATE)+1 ELSE DATEDIFF(DATE_FORMAT(CURRENT_DATE, '%Y-%m-25'),CURRENT_DATE)+1 END AS days_until_adjusted_end_date) as remaning_days FROM `case_schedules` join patients on case_schedules.patient_id=patients.id where schedule_date=CURRENT_DATE and status!='Cancelled' and chargeable=1";
   db.query(query2, (err, result) => {
     return res.status(200).json({ success: result });
   });
   //return res.status(200).json({success:"Tested"});
-
 };
 
 const getSummary = async (req, res, next) => {
-
   try {
-
     const { from_date, to_date, branch_id } = req.query;
 
+    console.log(req.query);
+
     if (!from_date || !to_date) {
-      return res.status(400).json({ error: 'Please provide both start and end dates' });
+      return res
+        .status(400)
+        .json({ error: "Please provide both start and end dates" });
     }
 
     const default_branches = await new Promise((resolve, reject) => {
-
       db.query("select distinct id from master_branches", (err, results) => {
         if (err) {
           reject(err);
         } else {
           resolve(results);
+          console.log("branches", results);
         }
       });
-
     });
-    all_branches = default_branches.map(tt => tt.id);
+    all_branches = default_branches.map((tt) => tt.id);
+
+    console.log("allbranches", all_branches);
 
     const filter_branches = !branch_id ? all_branches : branch_id;
 
@@ -55,17 +60,20 @@ const getSummary = async (req, res, next) => {
     });
     //console.log(results);
 
-    const get_today_invoice_id_query = "select distinct id from case_invoices where invoice_date between ? and ? and branch_id in (?)";
+    const get_today_invoice_id_query =
+      "select distinct id from case_invoices where invoice_date between ? and ? and branch_id in (?)";
     const today_invoice_ids = await new Promise((resolve, reject) => {
-      db.query(get_today_invoice_id_query, [from_date, to_date, filter_branches], (err, results) => {
-
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
+      db.query(
+        get_today_invoice_id_query,
+        [from_date, to_date, filter_branches],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
         }
-
-      });
+      );
     });
 
     console.log(today_invoice_ids);
@@ -86,85 +94,102 @@ const getSummary = async (req, res, next) => {
     if (output == true) {
       const receipt_query = `select  COALESCE(SUM(receipt_amount), 0) as total_receipt_amount from case_receipts where date(created_at) between ? and ? and branch_id in (?) and item_id in (?)`;
       const receipt_results = await new Promise((resolve, reject) => {
-        db.query(receipt_query, [from_date, to_date, filter_branches, all_total_invoice_ids], (err, results) => {
+        db.query(
+          receipt_query,
+          [from_date, to_date, filter_branches, all_total_invoice_ids],
+          (err, results) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve(results);
+            }
+          }
+        );
+      });
+      result_json["Invoice_Sum"] = invoice_results[0].total_invoice_amount;
+      result_json["Receipt_Sum"] = receipt_results[0].total_receipt_amount;
+    } else {
+      result_json["Invoice_Sum"] = 0;
+      result_json["Receipt_Sum"] = 0;
+    }
+
+    const get_completed_schedules_query =
+      "SELECT sum(case_schedules.amount) as total_completed_schedules_amount FROM `case_schedules` join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id where schedule_date>=? and schedule_date<=? and case_schedules.branch_id in (?) and case_schedules.membership_type='Daily' and case_schedules.status='Completed' and bill_type='Countable' and chargeable=1 and case_schedules.id not in (select distinct case_invoice_items.item_id from case_invoice_items where date(case_invoice_items.created_at)>=? and date(case_invoice_items.created_at)<=?)";
+    const get_completed_schedules = await new Promise((resolve, reject) => {
+      db.query(
+        get_completed_schedules_query,
+        [from_date, to_date, filter_branches, from_date, to_date],
+        (err, results) => {
           if (err) {
             reject(err);
           } else {
             resolve(results);
           }
-        });
-      });
-      result_json['Invoice_Sum'] = invoice_results[0].total_invoice_amount;
-      result_json['Receipt_Sum'] = receipt_results[0].total_receipt_amount;
-
-    } else {
-      result_json['Invoice_Sum'] = 0;
-      result_json['Receipt_Sum'] = 0;
-    }
-
-    const get_completed_schedules_query = "SELECT sum(case_schedules.amount) as total_completed_schedules_amount FROM `case_schedules` join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id where schedule_date>=? and schedule_date<=? and case_schedules.branch_id in (?) and case_schedules.membership_type='Daily' and case_schedules.status='Completed' and bill_type='Countable' and chargeable=1 and case_schedules.id not in (select distinct case_invoice_items.item_id from case_invoice_items where date(case_invoice_items.created_at)>=? and date(case_invoice_items.created_at)<=?)";
-    const get_completed_schedules = await new Promise((resolve, reject) => {
-      db.query(get_completed_schedules_query, [from_date, to_date, filter_branches, from_date, to_date], (err, results) => {
-
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
         }
-
-      });
+      );
     });
 
-    const pending_schedules_query = "SELECT sum(case_schedules.amount) as total_pending_schedules_amount FROM `case_schedules` join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id where schedule_date>=? and schedule_date<=? and case_schedules.branch_id in (?) and case_schedules.membership_type='Daily' and case_schedules.status='Pending' and bill_type='Countable'  and chargeable=1 and case_schedules.id not in (select distinct case_invoice_items.item_id from case_invoice_items where date(case_invoice_items.created_at)>=? and date(case_invoice_items.created_at)<=?)";
+    const pending_schedules_query =
+      "SELECT sum(case_schedules.amount) as total_pending_schedules_amount FROM `case_schedules` join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id where schedule_date>=? and schedule_date<=? and case_schedules.branch_id in (?) and case_schedules.membership_type='Daily' and case_schedules.status='Pending' and bill_type='Countable'  and chargeable=1 and case_schedules.id not in (select distinct case_invoice_items.item_id from case_invoice_items where date(case_invoice_items.created_at)>=? and date(case_invoice_items.created_at)<=?)";
 
     const get_pending_schedules = await new Promise((resolve, reject) => {
-
-      db.query(pending_schedules_query, [from_date, to_date, filter_branches, from_date, to_date], (err, results) => {
-
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results)
+      db.query(
+        pending_schedules_query,
+        [from_date, to_date, filter_branches, from_date, to_date],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
         }
-
-      });
-
-
+      );
     });
 
+    const unapprovedFundsQuery = `
+    SELECT
+    COALESCE(
+        (SELECT SUM(case_receipts.receipt_amount)
+         FROM case_receipts
+         WHERE case_receipts.receipt_date >= ? AND case_receipts.receipt_date <= ?
+         AND case_receipts.branch_id IN (?)
+         AND case_receipts.status = 'Not_Acknowledged'), 0) AS unallocated_fund`;
 
-    // console.trace("branchess..:;" + filter_branches);
-
-    //     const unapprovedFundsQuery = `
-    //     SELECT
-    //         CASE
-    //             WHEN ? IS NOT NULL THEN ?  -- Fetch data for a specific branch
-    //             ELSE SUM(case_receipts.receipt_amount)  -- Sum data for all branches
-    //         END AS unallocated_fund,
-    //         master_branches.branch_name
-    //     FROM
-    //         case_receipts
-    //     JOIN
-    //         master_branches ON master_branches.id = case_receipts.branch_id
-    //     WHERE
-    //         case_receipts.receipt_date BETWEEN ? AND ?
-    //         AND (case_receipts.branch_id = ? OR ? IS NULL)  -- Use branch_id if given, else ignore it
-    //         AND case_receipts.status = 'Not_Acknowledged'
-    //     GROUP BY
-    //         master_branches.branch_name
-    // `;
-
-
-
-
-
-    const unapprovedFundsQuery = "SELECT SUM(case_receipts.receipt_amount) AS unallocated_fund, master_branches.branch_name FROM case_receipts JOIN master_branches ON master_branches.id = case_receipts.branch_id WHERE case_receipts.receipt_date BETWEEN ? AND ? AND case_receipts.branch_id IN (?) AND case_receipts.status = 'Not_Acknowledged' GROUP BY master_branches.branch_name";
-
-
+    console.log("check", req.query);
 
     const get_unapproved_funds = await new Promise((resolve, reject) => {
+      console.log(
+        "parametercheck",
+        unapprovedFundsQuery,
+        from_date,
+        to_date,
+        branch_id
+      );
       db.query(
         unapprovedFundsQuery,
+        [from_date, to_date, filter_branches, filter_branches],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            console.log("unapprovedFundsresults", results);
+            resolve(results);
+          }
+        }
+      );
+    });
+
+    const b2b_query = `SELECT COALESCE(SUM(case_schedules.amount), 0) as Totalb2bfunds
+    FROM master_business_to_business_category
+    JOIN master_business_to_business_subcategories ON master_business_to_business_category.id = master_business_to_business_subcategories.category_id
+    JOIN leads ON master_business_to_business_category.id = leads.business_category
+    JOIN case_schedules ON leads.patient_id = case_schedules.patient_id
+    JOIN master_branches ON case_schedules.branch_id = master_branches.id
+    WHERE case_schedules.schedule_date >= '2023-10-01' AND case_schedules.schedule_date <= '2023-10-31' AND case_schedules.branch_id IN (1, 2, 3, 4);`;
+
+    const get_b2b_funds = await new Promise((resolve, reject) => {
+      db.query(
+        b2b_query,
         [from_date, to_date, filter_branches],
         (err, results) => {
           if (err) {
@@ -176,15 +201,17 @@ const getSummary = async (req, res, next) => {
       );
     });
 
-    // console.log('Unapproved Funds: ' + get_unapproved_funds[0].unallocated_fund);
 
-    // console.log("Unapproved Funds: " + get_unapproved_funds[0].unallocated_fund);
 
-    result_json['Completed_Schedule_Sum'] = get_completed_schedules[0].total_completed_schedules_amount;
-    result_json['Estimated_Sum'] = result_json['Invoice_Sum'] + result_json['Completed_Schedule_Sum'];
-    result_json['Pending_Schedules_Sum'] = get_pending_schedules[0].total_pending_schedules_amount;
-    // result_json['Unapproved_Funds'] = get_unapproved_funds[0].unallocated_fund;
-    // result_json['Unapproved_Funds_Sum'] = get_unapproved_funds[0].unallocated_fund;
+    result_json["Completed_Schedule_Sum"] =
+      get_completed_schedules[0].total_completed_schedules_amount;
+    result_json["Estimated_Sum"] =
+      result_json["Invoice_Sum"] + result_json["Completed_Schedule_Sum"];
+    result_json["Pending_Schedules_Sum"] =
+      get_pending_schedules[0].total_pending_schedules_amount;
+    result_json["Unapproved_Funds"] = get_unapproved_funds[0].unallocated_fund;
+    result_json["B2B_Funds"] = get_b2b_funds[0].unallocated_fund;
+    // result_json['Unapproved_Funds'] = unapprovedFundstest()
     //console.log(get_completed_schedules);
 
     res.status(200).json({ success: true, data: result_json });
@@ -192,27 +219,23 @@ const getSummary = async (req, res, next) => {
     // console.table(result_json['Unapproved_Funds']);
     // console.table(result_json);
 
-
     //console.log("Total Amount Sum: $" + totalAmountSum.toFixed(2)); // Rounded to 2 decimal places
-
   } catch (error) {
-
     res.status(200).json({ success: false, data: error });
   }
-}
+};
 
 const getalldayinvoice = async (req, res, next) => {
-
   try {
-
     const { from_date, to_date, branch_id } = req.query;
 
     if (!from_date || !to_date) {
-      return res.status(400).json({ error: 'Please provide both start and end dates' });
+      return res
+        .status(400)
+        .json({ error: "Please provide both start and end dates" });
     }
 
     const default_branches = await new Promise((resolve, reject) => {
-
       db.query("select distinct id from master_branches", (err, results) => {
         if (err) {
           reject(err);
@@ -220,11 +243,12 @@ const getalldayinvoice = async (req, res, next) => {
           resolve(results);
         }
       });
-
     });
-    all_branches = default_branches.map(tt => tt.id);
+    all_branches = default_branches.map((tt) => tt.id);
 
-    const filter_branches = !(branch_id == undefined) ? all_branches : branch_id;
+    const filter_branches = !(branch_id == undefined)
+      ? all_branches
+      : branch_id;
 
     const query = `
         SELECT case_invoices.invoice_date as label,sum(case_invoices.total_amount) as y
@@ -241,57 +265,45 @@ const getalldayinvoice = async (req, res, next) => {
         }
       });
     });
-    console.log("Daily Results:");
-    console.log(invoice_results);
+    // console.log("Daily Results:");
+    // console.log(invoice_results);
 
     invoice_results.forEach(function (obj) {
-
-
       //const timestamp = "2023-09-12T18:30:00.000Z";
       const dateObject = new Date(obj.label);
 
       // Extract year, month, and day components
       const year = dateObject.getUTCFullYear() % 100; // Get the last two digits of the year
-      const month = (dateObject.getUTCMonth() + 1).toString().padStart(2, '0'); // Months are zero-based, so add 1
-      const day = dateObject.getUTCDate().toString().padStart(2, '0');
+      const month = (dateObject.getUTCMonth() + 1).toString().padStart(2, "0"); // Months are zero-based, so add 1
+      const day = dateObject.getUTCDate().toString().padStart(2, "0");
 
       // Create the formatted date string
       const formattedDate = `${day}-${month}-${year}`;
 
-      console.log(formattedDate); // Output: "12-09-23"
+      // console.log(formattedDate); // Output: "12-09-23"
       obj.label = formattedDate;
 
-
       //console.log(obj.label);
-    })
-
+    });
 
     //console.log(results);
-
-
-
 
     res.status(200).json({ success: true, data: invoice_results });
 
     //console.log("Total Amount Sum: $" + totalAmountSum.toFixed(2)); // Rounded to 2 decimal places
-
-  } catch (error) {
-
-  }
-}
+  } catch (error) { }
+};
 const getInvoices = async (req, res, next) => {
-
   try {
-
-
     const { from_date, to_date, branch_id } = req.query;
 
     if (!from_date || !to_date) {
-      return res.status(400).json({ error: 'Please provide both start and end dates' });
+      return res
+        .status(400)
+        .json({ error: "Please provide both start and end dates" });
     }
-    console.log("branchesssss:-" + branch_id);
+    // console.log("branchesssss:-" + branch_id);
     const default_branches = await new Promise((resolve, reject) => {
-
       db.query("select distinct id from master_branches", (err, results) => {
         if (err) {
           reject(err);
@@ -299,12 +311,11 @@ const getInvoices = async (req, res, next) => {
           resolve(results);
         }
       });
-
     });
-    all_branches = default_branches.map(tt => tt.id);
+    all_branches = default_branches.map((tt) => tt.id);
 
-    const filter_branches = !(branch_id) ? all_branches : branch_id;
-    console.log("branchess..:;" + filter_branches);
+    const filter_branches = !branch_id ? all_branches : branch_id;
+    // console.log("branchess..:;" + filter_branches);
     const query1 = `
         SELECT case_invoices.id,master_branches.branch_name,patients.patient_id,patients.first_name,case_invoices.invoice_no,date_format(case_invoices.invoice_date,'%Y-%m-%d') as dates,case_invoices.total_amount,case_invoices.amount_paid,case_invoices.status 
         FROM case_invoices 
@@ -314,9 +325,46 @@ const getInvoices = async (req, res, next) => {
        and case_invoices.branch_id IN (?)`;
     //const branches=!(req.query.branch_id)?req.query.branch_id:[;
     const results = await new Promise((resolve, reject) => {
-      console.log(query1);
-      console.log(from_date, to_date, filter_branches);
-      db.query(query1, [from_date, to_date, filter_branches], (err, results) => {
+      // console.log(query1);
+      // console.log(from_date, to_date, filter_branches);
+      db.query(
+        query1,
+        [from_date, to_date, filter_branches],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
+        }
+      );
+    });
+    // console.log(results);
+
+    const totalAmountSum = results.reduce(
+      (sum, invoice) => sum + invoice.total_amount,
+      0
+    );
+
+    // console.log("Total Amount Sum: $" + totalAmountSum.toFixed(2)); // Rounded to 2 decimal places
+
+    res.status(200).json({ success: true, data: results });
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+const getInvoicesPieChart = async (req, res, next) => {
+  try {
+    const { from_date, to_date, branch_id } = req.query;
+    if (!from_date || !to_date) {
+      return res
+        .status(400)
+        .json({ error: "Please provide both start and end dates" });
+    }
+    // console.log("branchesssss:-" + branch_id);
+    const default_branches = await new Promise((resolve, reject) => {
+      db.query("select distinct id from master_branches", (err, results) => {
         if (err) {
           reject(err);
         } else {
@@ -324,44 +372,9 @@ const getInvoices = async (req, res, next) => {
         }
       });
     });
-    // console.log(results);
-
-    const totalAmountSum = results.reduce((sum, invoice) => sum + invoice.total_amount, 0);
-
-    console.log("Total Amount Sum: $" + totalAmountSum.toFixed(2)); // Rounded to 2 decimal places
-
-
-
-    res.status(200).json({ success: true, data: results });
-
-
-  } catch (error) {
-    console.log(error);
-  }
-}
-
-
-const getInvoicesPieChart = async (req, res, next) => {
-  try {
-    const { from_date, to_date, branch_id } = req.query;
-    if (!from_date || !to_date) {
-      return res.status(400).json({ error: 'Please provide both start and end dates' });
-
-    }
-    console.log("branchesssss:-" + branch_id);
-    const default_branches = await new Promise((resolve, reject) => {
-
-      db.query("select distinct id from master_branches", (err, results) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
-        }
-      })
-    })
-    all_branches = default_branches.map(tt => tt.id);
-    const filter_branches = !(branch_id) ? all_branches : branch_id;
-    console.log("branchess..:;" + filter_branches);
+    all_branches = default_branches.map((tt) => tt.id);
+    const filter_branches = !branch_id ? all_branches : branch_id;
+    // console.log("branchess..:;" + filter_branches);
     const query2 = `SELECT
   branch_sums.branch_name,
   branch_sums.total_amount_sum,
@@ -388,50 +401,39 @@ ORDER BY
 
     const query1 = `SELECT mb.id, mb.branch_name ,SUM(ci.total_amount) AS total_amount_sum FROM case_invoices ci JOIN master_branches mb ON ci.branch_id = mb.id WHERE ci.invoice_date BETWEEN ? AND ? AND ci.status != 'Cancelled' AND ci.branch_id IN (?) GROUP BY mb.branch_name order by mb.id`;
 
-
     const results = await new Promise((resolve, reject) => {
-      console.log(query1);
-      console.log(from_date, to_date, filter_branches);
-      db.query(query1, [from_date, to_date, filter_branches], (err, results) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
+      // console.log(query1);
+      // console.log(from_date, to_date, filter_branches);
+      db.query(
+        query1,
+        [from_date, to_date, filter_branches],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
         }
-      });
+      );
     });
     // console.log(results);
     res.status(200).json({ success: true, data: results });
-
   } catch (error) {
     console.log(error);
   }
-
-}
-
-
-
-
-
-
-
-
-
-
+};
 
 const getschedulerevenue = async (req, res, next) => {
-
   try {
-
-
     const { from_date, to_date, branch_id, category_required } = req.query;
 
     if (!from_date || !to_date) {
-      return res.status(400).json({ error: 'Please provide both start and end dates' });
+      return res
+        .status(400)
+        .json({ error: "Please provide both start and end dates" });
     }
 
     const default_branches = await new Promise((resolve, reject) => {
-
       db.query("select distinct id from master_branches", (err, results) => {
         if (err) {
           reject(err);
@@ -439,63 +441,63 @@ const getschedulerevenue = async (req, res, next) => {
           resolve(results);
         }
       });
-
     });
-    all_branches = default_branches.map(tt => tt.id);
+    all_branches = default_branches.map((tt) => tt.id);
 
     const default_categories = await new Promise((resolve, reject) => {
-
-      db.query("select distinct category_id from master_services", (err, results) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
+      db.query(
+        "select distinct category_id from master_services",
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
         }
-      });
-
+      );
     });
-    all_branches = default_branches.map(tt => tt.id);
-    all_categories = default_categories.map(tt => tt.category_id);
-    const filter_branches = !(branch_id) ? all_branches : branch_id;
-    const filter_categories = !(category_required) ? all_categories : category_required;
+    all_branches = default_branches.map((tt) => tt.id);
+    all_categories = default_categories.map((tt) => tt.category_id);
+    const filter_branches = !branch_id ? all_branches : branch_id;
+    const filter_categories = !category_required
+      ? all_categories
+      : category_required;
     //const query = `SELECT master_branches.branch_name,patient_id,sum(amount) as total_amount,service_required FROM case_schedules join master_branches on case_schedules.branch_id=master_branches.id where schedule_date BETWEEN (?) and (?) and case_schedules.id in (SELECT item_id FROM case_invoice_items) and case_schedules.branch_id in (?) group by service_required,patient_id `;
     //const branches=!(req.query.branch_id)?req.query.branch_id:[;
-    console.log(filter_categories);
+    // console.log(filter_categories);
     const query = `select concat(patients.first_name,"",patients.last_name) as full_name,master_branches.branch_name,patients.gender,patients.contact_number,master_service_category.category_name,master_services.service_name,case_schedules.schedule_date,case_schedules.amount from case_schedules join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id join master_service_category on master_services.category_id=master_service_category.id where case_schedules.schedule_date BETWEEN ? and ? and case_schedules.status='Completed' and case_schedules.branch_id in (?) and master_services.category_id in (?)`;
     const results = await new Promise((resolve, reject) => {
-      db.query(query, [from_date, to_date, filter_branches, filter_categories], (err, results) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
+      db.query(
+        query,
+        [from_date, to_date, filter_branches, filter_categories],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
         }
-      });
+      );
     });
-    console.log(results);
-
-
+    // console.log(results);
 
     res.status(200).json({ success: true, data: results });
-
-
   } catch (error) {
     console.log(error);
   }
-}
+};
 
 const getschedulecategoryrevenue = async (req, res, next) => {
-
   try {
-
-
     const { from_date, to_date, branch_id, category_required } = req.query;
 
     if (!from_date || !to_date) {
-      return res.status(400).json({ error: 'Please provide both start and end dates' });
+      return res
+        .status(400)
+        .json({ error: "Please provide both start and end dates" });
     }
 
     const default_branches = await new Promise((resolve, reject) => {
-
       db.query("select distinct id from master_branches", (err, results) => {
         if (err) {
           reject(err);
@@ -503,52 +505,54 @@ const getschedulecategoryrevenue = async (req, res, next) => {
           resolve(results);
         }
       });
-
     });
-    all_branches = default_branches.map(tt => tt.id);
+    all_branches = default_branches.map((tt) => tt.id);
 
     const default_categories = await new Promise((resolve, reject) => {
-
-      db.query("select distinct category_id from master_services", (err, results) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
+      db.query(
+        "select distinct category_id from master_services",
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
         }
-      });
-
+      );
     });
-    all_branches = default_branches.map(tt => tt.id);
-    all_categories = default_categories.map(tt => tt.category_id);
-    const filter_branches = !(branch_id) ? all_branches : branch_id;
-    console.log(all_categories);
-    const filter_categories = !(category_required) ? all_categories : category_required;
+    all_branches = default_branches.map((tt) => tt.id);
+    all_categories = default_categories.map((tt) => tt.category_id);
+    const filter_branches = !branch_id ? all_branches : branch_id;
+    // console.log(all_categories);
+    const filter_categories = !category_required
+      ? all_categories
+      : category_required;
     //const query = `SELECT master_branches.branch_name,patient_id,sum(amount) as total_amount,service_required FROM case_schedules join master_branches on case_schedules.branch_id=master_branches.id where schedule_date BETWEEN (?) and (?) and case_schedules.id in (SELECT item_id FROM case_invoice_items) and case_schedules.branch_id in (?) group by service_required,patient_id `;
     //const branches=!(req.query.branch_id)?req.query.branch_id:[;
-    console.log(filter_categories);
+    // console.log(filter_categories);
     //const query=`SELECT master_branches.branch_name ,master_service_category.category_name,count(case_schedules.service_required) as service_required,sum(case_schedules.amount) as amount FROM case_schedules join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id  join master_service_category on master_services.category_id=master_service_category.id where case_schedules.schedule_date BETWEEN ? and ? and case_schedules.status='Completed' and case_schedules.branch_id in (?) and master_services.category_id in (?) group by master_services.category_id`;
 
     const query = `SELECT master_service_category.category_name as label,sum(case_schedules.amount) as y FROM case_schedules join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id  join master_service_category on master_services.category_id=master_service_category.id where case_schedules.schedule_date BETWEEN ? and ? and case_schedules.status='Completed' and case_schedules.branch_id in (?) and master_services.category_id in (?) group by master_services.category_id`;
     const results = await new Promise((resolve, reject) => {
-      db.query(query, [from_date, to_date, filter_branches, filter_categories], (err, results) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
+      db.query(
+        query,
+        [from_date, to_date, filter_branches, filter_categories],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
         }
-      });
+      );
     });
     console.log(results);
 
-
-
     res.status(200).json({ success: true, data: results });
-
-
   } catch (error) {
     console.log(error);
   }
-}
+};
 
 const getschedulesubcategoryrevenue = async (req, res, next) => {
   // <<<<<<< HEAD
@@ -565,8 +569,6 @@ const getschedulesubcategoryrevenue = async (req, res, next) => {
   // =======
 
   try {
-
-
     const { from_date, to_date, branch_id, category_required } = req.query;
 
     if (!from_date || !to_date) {
@@ -576,7 +578,6 @@ const getschedulesubcategoryrevenue = async (req, res, next) => {
     }
 
     const default_branches = await new Promise((resolve, reject) => {
-
       // >>>>>>> cb23a2f983cdb7db0e072814b1ce192b71203035
       db.query("select distinct id from master_branches", (err, results) => {
         if (err) {
@@ -590,27 +591,27 @@ const getschedulesubcategoryrevenue = async (req, res, next) => {
 
     //Some Category will be selected default so no need of delfault category
 
-    all_branches = default_branches.map(tt => tt.id);
+    all_branches = default_branches.map((tt) => tt.id);
 
-    const filter_branches = !(branch_id) ? all_branches : branch_id;
+    const filter_branches = !branch_id ? all_branches : branch_id;
 
     const query = `SELECT master_services.service_name as label,sum(case_schedules.amount) as y FROM case_schedules join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id  join master_service_category on master_services.category_id=master_service_category.id where case_schedules.schedule_date BETWEEN ? and ? and case_schedules.status='Completed' and case_schedules.branch_id in (?) and master_services.category_id in (?) group by master_services.id`;
     const results = await new Promise((resolve, reject) => {
-      db.query(query, [from_date, to_date, filter_branches, category_required], (err, results) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
+      db.query(
+        query,
+        [from_date, to_date, filter_branches, category_required],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
         }
-      });
+      );
     });
     console.log(results);
 
-
-
     res.status(200).json({ success: true, data: results });
-
-
   } catch (error) {
     console.log(error);
   }
@@ -639,27 +640,24 @@ const getschedulesubcategoryrevenue = async (req, res, next) => {
 //     });
 //     console.log(results);
 
-
-
 //     res.status(200).json({ success: true, data: results });
-
 
 //   } catch (error) {
 //     console.log(error);
 //   }
 // }
 
-
 const getschedulesummary = async (req, res, next) => {
   try {
     const { from_date, to_date, branch_id, category_required } = req.query;
 
     if (!from_date || !to_date) {
-      return res.status(400).json({ error: 'Please provide both start and end dates' });
+      return res
+        .status(400)
+        .json({ error: "Please provide both start and end dates" });
     }
 
     const default_branches = await new Promise((resolve, reject) => {
-
       db.query("select distinct id from master_branches", (err, results) => {
         if (err) {
           reject(err);
@@ -667,77 +665,76 @@ const getschedulesummary = async (req, res, next) => {
           resolve(results);
         }
       });
-
     });
-    all_branches = default_branches.map(tt => tt.id);
+    all_branches = default_branches.map((tt) => tt.id);
 
     const default_categories = await new Promise((resolve, reject) => {
-
-      db.query("select distinct category_id from master_services", (err, results) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
+      db.query(
+        "select distinct category_id from master_services",
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
         }
-      });
-
+      );
     });
-    all_branches = default_branches.map(tt => tt.id);
-    all_categories = default_categories.map(tt => tt.category_id);
-    const filter_branches = !(branch_id) ? all_branches : branch_id;
-    const filter_categories = !(category_required) ? all_categories : category_required;
+    all_branches = default_branches.map((tt) => tt.id);
+    all_categories = default_categories.map((tt) => tt.category_id);
+    const filter_branches = !branch_id ? all_branches : branch_id;
+    const filter_categories = !category_required
+      ? all_categories
+      : category_required;
     //const query = `SELECT master_branches.branch_name,patient_id,sum(amount) as total_amount,service_required FROM case_schedules join master_branches on case_schedules.branch_id=master_branches.id where schedule_date BETWEEN (?) and (?) and case_schedules.id in (SELECT item_id FROM case_invoice_items) and case_schedules.branch_id in (?) group by service_required,patient_id `;
     //const branches=!(req.query.branch_id)?req.query.branch_id:[;
     console.log(filter_categories);
     const query = `select case_schedules.amount,case_schedules.status as status from case_schedules join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id where case_schedules.schedule_date BETWEEN ? and ? and case_schedules.status in ('Completed','Pending') and case_schedules.branch_id in (?) and  master_services.category_id in (?);`;
     const results = await new Promise((resolve, reject) => {
-      db.query(query, [from_date, to_date, filter_branches, filter_categories], (err, results) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
+      db.query(
+        query,
+        [from_date, to_date, filter_branches, filter_categories],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
         }
-      });
+      );
     });
-    console.log(results);
+    // console.log(results);
     var pending = 0;
     var completed = 0;
     results.map((data) => {
-
-      if (data.status == 'Pending') {
+      if (data.status == "Pending") {
         pending = pending + data.amount;
       }
-      if (data.status == 'Completed') {
+      if (data.status == "Completed") {
         completed = completed + data.amount;
       }
-
     });
     var remaining = pending - completed;
     var result = pending + " " + completed + " " + remaining;
     var summary = {};
-    summary['Completed_Schedules'] = completed;
-    summary['Pending_Schedules'] = pending;
+    summary["Completed_Schedules"] = completed;
+    summary["Pending_Schedules"] = pending;
     res.status(200).json({ success: true, data: summary });
-
-
   } catch (error) {
     console.log(error);
   }
-}
+};
 const getreceipts = async (req, res, next) => {
-
   try {
-
-
     const { from_date, to_date, branch_id } = req.query;
 
-
     if (!from_date || !to_date) {
-      return res.status(400).json({ error: 'Please provide both start and end dates' });
+      return res
+        .status(400)
+        .json({ error: "Please provide both start and end dates" });
     }
 
     const default_branches = await new Promise((resolve, reject) => {
-
       db.query("select distinct id from master_branches", (err, results) => {
         if (err) {
           reject(err);
@@ -745,22 +742,22 @@ const getreceipts = async (req, res, next) => {
           resolve(results);
         }
       });
-
     });
-    all_branches = default_branches.map(tt => tt.id);
+    all_branches = default_branches.map((tt) => tt.id);
 
-    const filter_branches = !(branch_id == undefined) ? all_branches : branch_id;
+    const filter_branches = !(branch_id == undefined)
+      ? all_branches
+      : branch_id;
     console.log(from_date + " " + to_date + " " + filter_branches);
-    const query = "select distinct id from case_invoices where invoice_date between ? and ? and branch_id in (?) and status!='Cancelled'";
+    const query =
+      "select distinct id from case_invoices where invoice_date between ? and ? and branch_id in (?) and status!='Cancelled'";
     const today_invoice_ids = await new Promise((resolve, reject) => {
       db.query(query, [from_date, to_date, filter_branches], (err, results) => {
-
         if (err) {
           reject(err);
         } else {
           resolve(results);
         }
-
       });
     });
 
@@ -778,49 +775,43 @@ const getreceipts = async (req, res, next) => {
 
     //   });
     // });
-    const all_today_invoice_ids = today_invoice_ids.map(tt => tt.id);
+    const all_today_invoice_ids = today_invoice_ids.map((tt) => tt.id);
     //const receipts_created_query="select * from case_invoices join case_receipts on case_invoices.id=case_receipts.item_id where case_receipts.item_id in (?) and case_invoices.invoice_date >=? and case_invoices.invoice_date<=? and case_invoices.branch_id in (?)"
-    const receipts_created_query = "select master_branches.branch_name,patients.patient_id,patients.first_name,case_invoices.invoice_no,date_format(case_invoices.invoice_date,'%Y-%m-%d') as dates,case_invoices.total_amount,case_invoices.amount_paid,case_invoices.status from case_invoices join master_branches on case_invoices.branch_id=master_branches.id join patients on case_invoices.patient_id=patients.id where case_invoices.id in (select distinct item_id  from case_receipts where date(created_at) between ? and ? and branch_id in (?) and item_id in (?)) and case_invoices.status!='Cancelled'"
+    const receipts_created_query =
+      "select master_branches.branch_name,patients.patient_id,patients.first_name,case_invoices.invoice_no,date_format(case_invoices.invoice_date,'%Y-%m-%d') as dates,case_invoices.total_amount,case_invoices.amount_paid,case_invoices.status from case_invoices join master_branches on case_invoices.branch_id=master_branches.id join patients on case_invoices.patient_id=patients.id where case_invoices.id in (select distinct item_id  from case_receipts where date(created_at) between ? and ? and branch_id in (?) and item_id in (?)) and case_invoices.status!='Cancelled'";
     const today_receipts_created = await new Promise((resolve, reject) => {
-      db.query(receipts_created_query, [from_date, to_date, filter_branches, all_today_invoice_ids], (err, results) => {
-
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
+      db.query(
+        receipts_created_query,
+        [from_date, to_date, filter_branches, all_today_invoice_ids],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
         }
-
-      });
+      );
     });
-
-
 
     console.log(today_receipts_created);
 
-
-
     res.status(200).json({ success: true, data: today_receipts_created });
-
-
   } catch (error) {
     console.log(error);
   }
-}
+};
 
 const getpendingreceipts = async (req, res, next) => {
-
   try {
-
-
     const { from_date, to_date, branch_id } = req.query;
 
-
     if (!from_date || !to_date) {
-      return res.status(400).json({ error: 'Please provide both start and end dates' });
+      return res
+        .status(400)
+        .json({ error: "Please provide both start and end dates" });
     }
 
     const default_branches = await new Promise((resolve, reject) => {
-
       db.query("select distinct id from master_branches", (err, results) => {
         if (err) {
           reject(err);
@@ -828,66 +819,68 @@ const getpendingreceipts = async (req, res, next) => {
           resolve(results);
         }
       });
-
     });
-    all_branches = default_branches.map(tt => tt.id);
+    all_branches = default_branches.map((tt) => tt.id);
 
-    const filter_branches = !(branch_id == undefined) ? all_branches : branch_id;
+    const filter_branches = !(branch_id == undefined)
+      ? all_branches
+      : branch_id;
     console.log(from_date + " " + to_date + " " + filter_branches);
-    const query = "select distinct id from case_invoices where invoice_date between ? and ? and branch_id in (?)";
+    const query =
+      "select distinct id from case_invoices where invoice_date between ? and ? and branch_id in (?)";
     const today_invoice_ids = await new Promise((resolve, reject) => {
       db.query(query, [from_date, to_date, filter_branches], (err, results) => {
-
         if (err) {
           reject(err);
         } else {
           resolve(results);
         }
-
       });
     });
 
-
-    const all_today_invoice_ids = today_invoice_ids.map(tt => tt.id);
+    const all_today_invoice_ids = today_invoice_ids.map((tt) => tt.id);
     //const receipts_created_query="select * from case_invoices join case_receipts on case_invoices.id=case_receipts.item_id where case_receipts.item_id in (?) and case_invoices.invoice_date >=? and case_invoices.invoice_date<=? and case_invoices.branch_id in (?)"
-    const receipts_created_query = "select master_branches.branch_name,patients.patient_id,patients.first_name,case_invoices.invoice_no,date_format(case_invoices.invoice_date,'%Y-%m-%d') as dates,case_invoices.total_amount,case_invoices.amount_paid,case_invoices.status from case_invoices join master_branches on case_invoices.branch_id=master_branches.id join patients on case_invoices.patient_id=patients.id where case_invoices.id  not in (select distinct item_id  from case_receipts where date(created_at) between ? and ? and branch_id in (?) and item_id  in (?)) and case_invoices.invoice_date BETWEEN ? and ? and case_invoices.status!='Cancelled'"
+    const receipts_created_query =
+      "select master_branches.branch_name,patients.patient_id,patients.first_name,case_invoices.invoice_no,date_format(case_invoices.invoice_date,'%Y-%m-%d') as dates,case_invoices.total_amount,case_invoices.amount_paid,case_invoices.status from case_invoices join master_branches on case_invoices.branch_id=master_branches.id join patients on case_invoices.patient_id=patients.id where case_invoices.id  not in (select distinct item_id  from case_receipts where date(created_at) between ? and ? and branch_id in (?) and item_id  in (?)) and case_invoices.invoice_date BETWEEN ? and ? and case_invoices.status!='Cancelled'";
     const today_receipts_created = await new Promise((resolve, reject) => {
-      db.query(receipts_created_query, [from_date, to_date, filter_branches, all_today_invoice_ids, from_date, to_date], (err, results) => {
-
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
+      db.query(
+        receipts_created_query,
+        [
+          from_date,
+          to_date,
+          filter_branches,
+          all_today_invoice_ids,
+          from_date,
+          to_date,
+        ],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
         }
-
-      });
+      );
     });
 
-
-
-    console.log(today_receipts_created);
-
-
+    // console.log(today_receipts_created);
 
     res.status(200).json({ success: true, data: today_receipts_created });
-
-
   } catch (error) {
     console.log(error);
   }
-}
+};
 
 const getcompletedschedules = async (req, res, next) => {
-
   try {
-
     const { from_date, to_date, branch_id } = req.query;
     if (!from_date || !to_date) {
-      return res.status(400).json({ error: 'Please provide both start and end dates' });
+      return res
+        .status(400)
+        .json({ error: "Please provide both start and end dates" });
     }
 
     const default_branches = await new Promise((resolve, reject) => {
-
       db.query("select distinct id from master_branches", (err, results) => {
         if (err) {
           reject(err);
@@ -895,53 +888,49 @@ const getcompletedschedules = async (req, res, next) => {
           resolve(results);
         }
       });
-
     });
 
-    all_branches = default_branches.map(tt => tt.id);
+    all_branches = default_branches.map((tt) => tt.id);
 
-    const filter_branches = !(branch_id) ? all_branches : branch_id;
+    const filter_branches = !branch_id ? all_branches : branch_id;
 
     const filter = from_date + " " + to_date + " " + filter_branches;
 
-    const data_query = "SELECT patients.first_name,master_branches.branch_name,master_services.service_name,date_format(case_schedules.schedule_date,'%Y-%m-%d') as schedule_date,case_schedules.membership_type,case_schedules.assigned_tasks,case_schedules.amount,case_schedules.status FROM `case_schedules` join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id where schedule_date>=? and schedule_date<=? and case_schedules.branch_id in (?) and case_schedules.membership_type='Daily' and case_schedules.status='Completed' and bill_type='Countable'  and chargeable=1 and case_schedules.id not in (select distinct case_invoice_items.item_id from case_invoice_items where date(case_invoice_items.created_at)>=? and date(case_invoice_items.created_at)<=?)";
+    const data_query =
+      "SELECT patients.first_name,master_branches.branch_name,master_services.service_name,date_format(case_schedules.schedule_date,'%Y-%m-%d') as schedule_date,case_schedules.membership_type,case_schedules.assigned_tasks,case_schedules.amount,case_schedules.status FROM `case_schedules` join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id where schedule_date>=? and schedule_date<=? and case_schedules.branch_id in (?) and case_schedules.membership_type='Daily' and case_schedules.status='Completed' and bill_type='Countable'  and chargeable=1 and case_schedules.id not in (select distinct case_invoice_items.item_id from case_invoice_items where date(case_invoice_items.created_at)>=? and date(case_invoice_items.created_at)<=?)";
 
     const fetch_data = await new Promise((resolve, reject) => {
-
-      db.query(data_query, [from_date, to_date, filter_branches, from_date, to_date], (err, results) => {
-
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results)
+      db.query(
+        data_query,
+        [from_date, to_date, filter_branches, from_date, to_date],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
         }
-
-      });
-
-
+      );
     });
 
-
-
-
     return res.status(200).json({ success: fetch_data });
-
   } catch (error) {
-    return res.status(400).json({ error: "Error in fetching completed schedules" });
+    return res
+      .status(400)
+      .json({ error: "Error in fetching completed schedules" });
   }
-}
+};
 
 const getpendingschedules = async (req, res, next) => {
-
   try {
-
     const { from_date, to_date, branch_id } = req.query;
     if (!from_date || !to_date) {
-      return res.status(400).json({ error: 'Please provide both start and end dates' });
+      return res
+        .status(400)
+        .json({ error: "Please provide both start and end dates" });
     }
 
     const default_branches = await new Promise((resolve, reject) => {
-
       db.query("select distinct id from master_branches", (err, results) => {
         if (err) {
           reject(err);
@@ -949,43 +938,41 @@ const getpendingschedules = async (req, res, next) => {
           resolve(results);
         }
       });
-
     });
 
-    all_branches = default_branches.map(tt => tt.id);
+    all_branches = default_branches.map((tt) => tt.id);
 
-    const filter_branches = !(branch_id) ? all_branches : branch_id;
+    const filter_branches = !branch_id ? all_branches : branch_id;
 
     const filter = from_date + " " + to_date + " " + filter_branches;
 
-    const data_query = "SELECT patients.first_name,master_branches.branch_name,master_services.service_name,date_format(case_schedules.schedule_date,'%Y-%m-%d') as schedule_date,case_schedules.membership_type,case_schedules.assigned_tasks,case_schedules.amount,case_schedules.status FROM `case_schedules` join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id where schedule_date>=? and schedule_date<=? and case_schedules.branch_id in (?) and case_schedules.membership_type='Daily' and case_schedules.status='Pending' and bill_type='Countable'  and chargeable=1 and case_schedules.id not in (select distinct case_invoice_items.item_id from case_invoice_items where date(case_invoice_items.created_at)>=? and date(case_invoice_items.created_at)<=?)";
+    const data_query =
+      "SELECT patients.first_name,master_branches.branch_name,master_services.service_name,date_format(case_schedules.schedule_date,'%Y-%m-%d') as schedule_date,case_schedules.membership_type,case_schedules.assigned_tasks,case_schedules.amount,case_schedules.status FROM `case_schedules` join master_services on case_schedules.service_required=master_services.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id where schedule_date>=? and schedule_date<=? and case_schedules.branch_id in (?) and case_schedules.membership_type='Daily' and case_schedules.status='Pending' and bill_type='Countable'  and chargeable=1 and case_schedules.id not in (select distinct case_invoice_items.item_id from case_invoice_items where date(case_invoice_items.created_at)>=? and date(case_invoice_items.created_at)<=?)";
 
     const pending_schedules = await new Promise((resolve, reject) => {
-
-      db.query(data_query, [from_date, to_date, filter_branches, from_date, to_date], (err, results) => {
-
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results)
+      db.query(
+        data_query,
+        [from_date, to_date, filter_branches, from_date, to_date],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
         }
-
-      });
-
-
+      );
     });
 
     return res.status(200).json({ success: pending_schedules });
-
   } catch (error) {
-    return res.status(400).json({ error: "Error in fetching completed schedules" });
+    return res
+      .status(400)
+      .json({ error: "Error in fetching completed schedules" });
   }
-}
+};
 
 const getInvoiceSplitUp = async (req, res, next) => {
-
   try {
-
     //  const {invoice_no}=req.query;
     const { invoice_id } = req.query;
 
@@ -1002,41 +989,36 @@ const getInvoiceSplitUp = async (req, res, next) => {
     //  });
     //console.log(invoice_id_result[0].id);
     //const invoice_id=invoice_id_result[0].id;
-    const query = "select master_branches.branch_name,case_schedules.schedule_date,master_services.service_name,case_schedules.amount from case_schedules join case_invoice_items on case_invoice_items.item_id=case_schedules.id join master_services on case_schedules.service_required=master_services.id join master_branches on case_schedules.branch_id=master_branches.id where case_invoice_items.invoice_id=?";
+    const query =
+      "select master_branches.branch_name,case_schedules.schedule_date,master_services.service_name,case_schedules.amount from case_schedules join case_invoice_items on case_invoice_items.item_id=case_schedules.id join master_services on case_schedules.service_required=master_services.id join master_branches on case_schedules.branch_id=master_branches.id where case_invoice_items.invoice_id=?";
     const results = await new Promise((resolve, reject) => {
-
       db.query(query, [invoice_id], (err, query_result) => {
-
         if (err) {
           reject(err);
         } else {
           resolve(query_result);
         }
-
       });
-
     });
 
     res.status(200).json({ success: results });
-
   } catch (error) {
     console.log(error);
   }
 };
 
 const getServiceInvoiceSplitup = async (req, res, next) => {
-
   try {
-
     //  const {invoice_no}=req.query;
     const { from_date, to_date, branch_id, service_name } = req.query;
-    //console.log(service_name); 
+    //console.log(service_name);
     if (!from_date || !to_date) {
-      return res.status(400).json({ error: 'Please provide both start and end dates' });
+      return res
+        .status(400)
+        .json({ error: "Please provide both start and end dates" });
     }
 
     const default_branches = await new Promise((resolve, reject) => {
-
       db.query("select distinct id from master_branches", (err, results) => {
         if (err) {
           reject(err);
@@ -1044,56 +1026,62 @@ const getServiceInvoiceSplitup = async (req, res, next) => {
           resolve(results);
         }
       });
-
     });
-    all_branches = default_branches.map(tt => tt.id);
+    all_branches = default_branches.map((tt) => tt.id);
 
-    const filter_branches = !(branch_id == undefined) ? all_branches : branch_id;
+    const filter_branches = !(branch_id == undefined)
+      ? all_branches
+      : branch_id;
 
-    console.log(from_date + " " + to_date + " " + branch_id + " " + service_name);
+    console.log(
+      from_date + " " + to_date + " " + branch_id + " " + service_name
+    );
 
     const service_id = await new Promise((resolve, reject) => {
-
-      db.query("select id from master_services where service_name=?", [service_name], (err, results) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
+      db.query(
+        "select id from master_services where service_name=?",
+        [service_name],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
         }
-      });
-
+      );
     });
-    console.log(service_id[0].id);
+    // console.log(service_id[0].id);
 
-    query = "SELECT master_branches.branch_name as branch_name,patients.patient_id as patient_id,patients.first_name as patient_name,master_services.service_name as service_name,case_invoices.invoice_no as invoice_no,case_schedules.schedule_date as service_date,case_schedules.amount as amount FROM `case_invoices` join case_invoice_items on case_invoice_items.invoice_id=case_invoices.id join case_schedules on case_invoice_items.item_id=case_schedules.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id join master_services on case_schedules.service_required=master_services.id where invoice_date BETWEEN ? and ? and case_invoices.branch_id in (?) and case_schedules.service_required=?"
+    query =
+      "SELECT master_branches.branch_name as branch_name,patients.patient_id as patient_id,patients.first_name as patient_name,master_services.service_name as service_name,case_invoices.invoice_no as invoice_no,case_schedules.schedule_date as service_date,case_schedules.amount as amount FROM `case_invoices` join case_invoice_items on case_invoice_items.invoice_id=case_invoices.id join case_schedules on case_invoice_items.item_id=case_schedules.id join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id join master_services on case_schedules.service_required=master_services.id where invoice_date BETWEEN ? and ? and case_invoices.branch_id in (?) and case_schedules.service_required=?";
     const result = await new Promise((resolve, reject) => {
-
-      db.query(query, [from_date, to_date, filter_branches, service_id[0].id], (err, results) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(results);
+      db.query(
+        query,
+        [from_date, to_date, filter_branches, service_id[0].id],
+        (err, results) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(results);
+          }
         }
-      });
-
-
+      );
     });
     res.status(200).json({ success: true, data: result });
-
   } catch (error) {
     console.log(error);
   }
 };
 const getServiceInvoice = async (req, res) => {
-
   const { from_date, to_date, branch_id } = req.query;
 
   if (!from_date || !to_date) {
-    return res.status(400).json({ error: 'Please provide both start and end dates' });
+    return res
+      .status(400)
+      .json({ error: "Please provide both start and end dates" });
   }
 
   const default_branches = await new Promise((resolve, reject) => {
-
     db.query("select distinct id from master_branches", (err, results) => {
       if (err) {
         reject(err);
@@ -1101,9 +1089,8 @@ const getServiceInvoice = async (req, res) => {
         resolve(results);
       }
     });
-
   });
-  all_branches = default_branches.map(tt => tt.id);
+  all_branches = default_branches.map((tt) => tt.id);
 
   const filter_branches = !(branch_id == undefined) ? all_branches : branch_id;
 
@@ -1124,13 +1111,12 @@ const getServiceInvoice = async (req, res) => {
   });
   console.log(results);
   res.status(200).json({ success: true, data: results });
-
 };
 
 const ActiveClients = async (req, res) => {
   try {
-
-    const countQuery = "select master_branches.branch_name,master_services.id,patients.patient_id,concat(patients.first_name,' ',patients.last_name) as full_name,case_schedules.membership_type,patients.contact_number,case_schedules.schedule_date,master_services.service_name,case_schedules.status,case_schedules.created_at from case_schedules join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id join master_services on case_schedules.service_required=master_services.id where schedule_date>=? and schedule_date<=? and case_schedules.status=?  and case_schedules.service_required IN (?) and case_schedules.membership_type is not null and master_branches.id IN (?) ORDER BY `case_schedules`.`created_at` DESC";
+    const countQuery =
+      "select master_branches.branch_name,master_services.id,patients.patient_id,concat(patients.first_name,' ',patients.last_name) as full_name,case_schedules.membership_type,patients.contact_number,case_schedules.schedule_date,master_services.service_name,case_schedules.status,case_schedules.created_at from case_schedules join patients on case_schedules.patient_id=patients.id join master_branches on case_schedules.branch_id=master_branches.id join master_services on case_schedules.service_required=master_services.id where schedule_date>=? and schedule_date<=? and case_schedules.status=?  and case_schedules.service_required IN (?) and case_schedules.membership_type is not null and master_branches.id IN (?) ORDER BY `case_schedules`.`created_at` DESC";
     // const countResult = await db.query(countQuery,(error,result)=>{
     //   return res.status(200).json({success:result});
     // });
@@ -1141,7 +1127,6 @@ const ActiveClients = async (req, res) => {
     const itemsPerPage = parseInt(pageSize) || 100; // You can adjust the batch size as needed
 
     const offset = (currentPage - 1) * itemsPerPage;
-
 
     from_date = req.body.from_date;
     to_date = req.body.to_date;
@@ -1157,10 +1142,9 @@ const ActiveClients = async (req, res) => {
     if (from_date == "" && to_date == "") {
       from_date = today;
       to_date = today;
-      console.log('sd');
+      // console.log('sd');
     }
     if (branch_id == "") {
-
       branches = "select distinct id from master_branches";
       const exists = await new Promise((resolve, reject) => {
         db.query(branches, (err, results) => {
@@ -1189,23 +1173,22 @@ const ActiveClients = async (req, res) => {
       });
       var service_required = [];
       services.forEach((v) => service_required.push(v.id));
-      console.log(service_required);
+      // console.log(service_required);
     }
-    const countResult = await db.query(countQuery, [from_date, to_date, status, service_required, branch_id], (err, result) => {
-
-      // Fetch the actual data in batches asynchronously
-      console.log(result);
-      return res.status(200).json(result);
-
-
-    });
-
-
+    const countResult = await db.query(
+      countQuery,
+      [from_date, to_date, status, service_required, branch_id],
+      (err, result) => {
+        // Fetch the actual data in batches asynchronously
+        // console.log(result);
+        return res.status(200).json(result);
+      }
+    );
   } catch (error) {
     console.log(error);
     return res.status(500).json({ error: error });
   }
-}
+};
 
 const getServiceCategoryPieChart = async (req, res, next) => {
   console.log(req.params);
@@ -1217,7 +1200,7 @@ const getServiceCategoryPieChart = async (req, res, next) => {
         .status(400)
         .json({ error: "Please provide both start and end dates" });
     }
-    console.log("branchesssss:-" + branch_id);
+    // console.log("branchesssss:-" + branch_id);
     const default_branches = await new Promise((resolve, reject) => {
       db.query("select distinct id from master_branches", (err, results) => {
         if (err) {
@@ -1229,21 +1212,21 @@ const getServiceCategoryPieChart = async (req, res, next) => {
     });
     all_branches = default_branches.map((tt) => tt.id);
     const filter_branches = !branch_id ? all_branches : branch_id;
-    console.log("filter_branches:-" + filter_branches);
-    console.log("branchess..:;" + filter_branches);
+    // console.log("filter_branches:-" + filter_branches);
+    // console.log("branchess..:;" + filter_branches);
     const query2 = `SELECT master_branches.branch_name, SUM(case_schedules.amount) AS total_amount_sum FROM case_schedules JOIN master_services ON case_schedules.service_required = master_services.id JOIN patients ON case_schedules.patient_id = patients.id JOIN master_branches ON case_schedules.branch_id = master_branches.id JOIN master_service_category ON master_services.category_id = master_service_category.id WHERE case_schedules.schedule_date BETWEEN ? AND ? AND case_schedules.status = 'Completed' AND case_schedules.branch_id IN (?) AND master_services.category_id = ? GROUP BY master_branches.branch_name;`;
 
     //const query1 = `SELECT mb.id, mb.branch_name ,SUM(ci.total_amount) AS total_amount_sum FROM case_invoices ci JOIN master_branches mb ON ci.branch_id = mb.id WHERE ci.invoice_date BETWEEN ? AND ? AND ci.status != 'Cancelled' AND ci.branch_id IN (?) GROUP BY mb.branch_name order by mb.id`;
 
     const results = await new Promise((resolve, reject) => {
-      console.log(query2);
-      console.log(from_date, to_date, filter_branches);
-      console.log("Query Parameters:", [
-        from_date,
-        to_date,
-        filter_branches,
-        service_category,
-      ]);
+      // console.log(query2);
+      // console.log(from_date, to_date, filter_branches);
+      // console.log("Query Parameters:", [
+      //   from_date,
+      //   to_date,
+      //   filter_branches,
+      //   service_category,
+      // ]);
 
       db.query(
         query2,
@@ -1258,7 +1241,7 @@ const getServiceCategoryPieChart = async (req, res, next) => {
       );
     });
 
-    console.log("Executing SQL query:", query2);
+    // console.log("Executing SQL query:", query2);
 
     // console.log(results);
     res.status(200).json({ success: true, data: results });
@@ -1266,10 +1249,6 @@ const getServiceCategoryPieChart = async (req, res, next) => {
     console.log(error);
   }
 };
-
-
-
-
 
 const getUnapprovedFunds = async (req, res, next) => {
   try {
@@ -1292,8 +1271,9 @@ const getUnapprovedFunds = async (req, res, next) => {
     });
     all_branches = default_branches.map((tt) => tt.id);
 
-    const filter_branches = !(branch_id == undefined) ? all_branches : branch_id;
-
+    const filter_branches = !(branch_id == undefined)
+      ? all_branches
+      : branch_id;
 
     const query = `
       SELECT 
@@ -1332,16 +1312,6 @@ const getUnapprovedFunds = async (req, res, next) => {
   }
 };
 
-
-
-
-
-
-
-
-
-
-
 module.exports = {
   Reports,
   ActiveClients,
@@ -1362,4 +1332,5 @@ module.exports = {
   getInvoicesPieChart,
   getServiceCategoryPieChart,
   getUnapprovedFunds,
-}
+
+};

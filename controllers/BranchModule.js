@@ -42,7 +42,7 @@ const masterCategories = (req, res) => {
       res.status(500).send("An error occurred");
     } else {
       res.json(results);
-      console.log(results);
+      // console.log(results);
     }
   })
 }
