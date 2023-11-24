@@ -40,5 +40,6 @@ router.get("/getmasterservices", BranchModule.masterServices);
 router.get("/getmastercategories", BranchModule.masterCategories);
 router.post("/getservicecategorybranch", ReportModule_1.getServiceCategoryPieChart);
 router.post("/getunapprovedfunds", ReportModule_1.getUnapprovedFunds);
+router.post("/getb2bfunds", ReportModule_1.getb2bfunds);
 
 module.exports = router; // export to use in server.js
