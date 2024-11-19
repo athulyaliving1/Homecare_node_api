@@ -1,14 +1,24 @@
 var mysql = require("mysql");
 var config;
 config = {
+
   mysql_pool: mysql.createPool({
-    host: "162.241.123.158",
-    user: "theatgg6_shg",
-    password: "r3pbWhs8psb5nitZjlpDvg",
+    host: "homecare-db-mysql-blr1-54584-do-user-15527658-0.a.db.ondigitalocean.com",
+    user: "homecare",
+    password: "AVNS_BsVJnNkylX65pnCT1O7",
     database: "theatgg6_shc_branch288",
     multipleStatements: true,
     connectionLimit: 100, // Adjust as needed
   }),
+  
+  // mysql_pool: mysql.createPool({
+  //   host: "162.241.123.158",
+  //   user: "theatgg6_shg",
+  //   password: "r3pbWhs8psb5nitZjlpDvg",
+  //   database: "theatgg6_shc_branch288",
+  //   multipleStatements: true,
+  //   connectionLimit: 100, // Adjust as needed
+  // }),
   // mysql_pool : mysql.createPool({
   //     host     : '162.241.85.121',
   //     user     : 'athulslv_muthukumar',
